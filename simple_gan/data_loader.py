@@ -10,7 +10,7 @@ class DataLoader:
         batch_size: int,
         device: t.device,
         *,
-        crop=None,
+        crop=28,
         shuffle: bool = True,
     ):
         self.crop = crop
@@ -41,7 +41,7 @@ class DataLoader:
     def __segmentify(self, data: t.Tensor) -> t.Tensor:
         data = data[: (len(data) // 8) * 8]
         if self.crop is not None:
-            split_segments = data[:, :, : self.crop, : self.crop]
+            data = data[:, :, : self.crop, : self.crop]
 
         segments = t.stack(
             tuple(
