@@ -3,7 +3,7 @@ import os
 
 
 def main(
-    in_file_name="coastal_sea_data_preprocessed.pt", out_dir: str = "data"
+    in_file_name="coastal_sea_data_preprocessed_cur.pt", out_dir: str = "data"
 ):
     if not os.path.exists(out_dir):
         os.mkdir(out_dir)
