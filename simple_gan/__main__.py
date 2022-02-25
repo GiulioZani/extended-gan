@@ -44,10 +44,19 @@ def train_single_epoch(
 def train(
     epochs: int, data_folder: str, train_batch_size: int, test_batch_size: int
 ):
+    params = {
+        "bsize" : 128,# Batch size during training.
+        'imsize' : 64,# Spatial size of training images. All images will be resized to this size during preprocessing.
+        'nc' : 4, # Number of channles in the training images. For coloured images this is 3.
+        'nz' : 100,# Size of the Z latent vector (the input to the generator).
+        'ngf' : 64,# Size of feature maps in the generator. The depth will be multiples of this.
+        'ndf' : 64, # Size of features maps in the discriminator. The depth will be multiples of this.
+        'beta1' : 0.5,# Beta1 hyperparam for Adam optimizer
+    }
     device = t.device("cuda" if t.cuda.is_available() else "cpu")
     print(f"Using device {device}")
-    gen = Generator().to(device)
-    disc = Discriminator().to(device)
+    gen = Generator(params).to(device)
+    disc = Discriminator(params).to(device)
     gen_optim = t.optim.Adam(gen.parameters())
     disc_optim = t.optim.Adam(disc.parameters())
     history = []
