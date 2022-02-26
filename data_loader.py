@@ -103,17 +103,19 @@ def get_loaders(
 
 
 def test():
-    train_dl, test_dl = get_loaders(
-        "../datasets/data",
-        32,
-        64,
-        t.device("cuda" if t.cuda.is_available() else "cpu"),
-    )
-    for (x, y) in test_dl:
-        plt.imshow(x[0, 0, 0].cpu())
-        plt.show()
-        print(x.shape)
-        return
+    epochs = 10
+    for epoch in range(1, epochs + 1):
+        train_dl, test_dl = get_loaders(
+            "../datasets/data",
+            32,
+            64,
+            t.device("cuda" if t.cuda.is_available() else "cpu"),
+        )
+        for (x, y) in test_dl:
+            plt.imshow(x[0, 0, 0].cpu())
+            plt.show()
+            print(x.shape)
+            return
 
 
 if __name__ == "__main__":
