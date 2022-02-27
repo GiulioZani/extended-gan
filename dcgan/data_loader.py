@@ -42,15 +42,17 @@ class DataLoader:
         return result
 
     def __segmentify(self, data: t.Tensor) -> t.Tensor:
-        data = data[: (len(data) // 2*self.seq_len) * 2*self.seq_len]
+        data = data[: (len(data) // 2 * self.seq_len) * 2 * self.seq_len]
         if self.crop is not None:
             data = data[:, :, : self.crop, : self.crop]
 
         segments = t.stack(
             tuple(
                 el
-                for el in tuple(data[i : i + 2*self.seq_len] for i in range(len(data)))
-                if len(el) == 2*self.seq_len
+                for el in tuple(
+                    data[i : i + 2 * self.seq_len] for i in range(len(data))
+                )
+                if len(el) == 2 * self.seq_len
             )
         )
         return segments
@@ -65,12 +67,10 @@ class DataLoader:
         if len(result) == 0:
             raise StopIteration
         result = t.stack(
-            tuple(t.stack((s[:self.seq_len], s[self.seq_len:])) for s in result)
+            tuple(t.stack((s[: self.seq_len], s[self.seq_len :])) for s in result)
         ).transpose(0, 1)
         rand_indices = (
-            t.randperm(result.shape[1])
-            if self.shuffle
-            else t.arange(result.shape[1])
+            t.randperm(result.shape[1]) if self.shuffle else t.arange(result.shape[1])
         )
         results = (
             result[0][rand_indices].float().to(self.device),
@@ -88,7 +88,7 @@ def get_loaders(
     test_batch_size: int,
     device: t.device,
     *,
-    seq_len:int = 4
+    seq_len: int = 4
 ) -> tuple[DataLoader, DataLoader]:
     test_folder = os.path.join(data_location, "test")
     train_folder = os.path.join(data_location, "train")
