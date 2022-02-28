@@ -7,15 +7,22 @@ import matplotlib.animation as animation
 import random
 import os
 import ipdb
-
+import json
 from .model import (
     weights_init,
     Generator,
     FrameDiscriminator,
     TemporalDiscriminator,
+    GeneratorOriginal
 )
 from .data_loader import get_loaders, DataLoader
-from .utils import visualize_predictions, IncrementalAccuracy, accuracy_criterion
+from .utils import (
+    visualize_predictions,
+    IncrementalAccuracy,
+    accuracy_criterion,
+    TrainingHistory,
+)
+
 
 def test(
     dataloader: DataLoader,
@@ -28,7 +35,7 @@ def test(
     netG.eval()
     netFD.eval()
     netTD.eval()
-    
+
     inc_acc_FD = IncrementalAccuracy()
     inc_acc_TD = IncrementalAccuracy()
     inc_acc_G = IncrementalAccuracy()
@@ -38,7 +45,7 @@ def test(
             data = data.squeeze(2)
             real_data = data
             b_size = real_data.size(0)
-            real_label = (t.zeros(b_size, device=device) + 1)
+            real_label = t.zeros(b_size, device=device) + 1
             fake_label = t.zeros(b_size, device=device)
 
             if i == 0:
@@ -47,8 +54,8 @@ def test(
 
             pred_real_frame_label = netFD(y)
             pred_real_temp_label = netTD(t.cat((data, y), dim=1))
-            errFD_real = accuracy_criterion(pred_real_frame_label, real_label)
-            errTD_real = accuracy_criterion(pred_real_temp_label, real_label)
+            acc_FD_real = accuracy_criterion(pred_real_frame_label, real_label)
+            acc_TD_real = accuracy_criterion(pred_real_temp_label, real_label)
 
             fake_data = netG(data)
             fake_data_detached = fake_data.detach()
@@ -56,21 +63,127 @@ def test(
             pred_fake_temp_label = netTD(
                 t.cat((data, fake_data_detached), dim=1)
             )
-            errFD_fake = accuracy_criterion(pred_fake_frame_label, fake_label)
-            errTD_fake = accuracy_criterion(pred_fake_temp_label, fake_label)
+            acc_FD_fake = accuracy_criterion(pred_fake_frame_label, fake_label)
+            acc_TD_fake = accuracy_criterion(pred_fake_temp_label, fake_label)
 
-            inc_acc_FD += errFD_real + errFD_fake
-            inc_acc_TD += errTD_real + errTD_fake
+            inc_acc_FD += acc_FD_real + acc_FD_fake
+            inc_acc_TD += acc_TD_real + acc_TD_fake
 
             inc_acc_G += inc_acc_FD.reciprocal() + inc_acc_TD.reciprocal()
-    print(f"{inc_acc_FD=:.4f} {inc_acc_TD=:.4f} {inc_acc_G=:.4f}")
     netG.train()
     netTD.train()
     netFD.train()
     return {
-        'acc_temp_disc':inc_acc_TD.item(),
-        'acc_frame_disc':inc_acc_TD.item(),
-        'acc_gen':inc_acc_TD.item()
+        "val_acc_temp_disc": inc_acc_TD.item(),
+        "val_acc_frame_disc": inc_acc_FD.item(),
+        # "val_acc_gen": inc_acc_G.item(),
+    }
+
+
+def train_single_epoch(
+    *,
+    dataloader: DataLoader,
+    netG: Generator,
+    netFD: FrameDiscriminator,
+    netTD: TemporalDiscriminator,
+    optimizerG,
+    optimizerFD,
+    optimizerTD,
+    criterion,
+    device: t.device,
+    epoch: int,
+):
+    inc_acc_FD = IncrementalAccuracy()
+    inc_acc_TD = IncrementalAccuracy()
+    inc_acc_G = IncrementalAccuracy()
+    for i, (x, y) in enumerate(dataloader):
+        y = y.squeeze(2)
+        data = x.squeeze(2)
+        # Get batch size. Can be different from params['nbsize'] for last batch in epoch.
+        b_size = data.size(0)
+
+        # Make accumalated gradients of the discriminator zero.
+        netTD.zero_grad()
+        netFD.zero_grad()
+        # Create labels for the real data. (label=1)
+        real_label = t.zeros(b_size, device=device) + 1
+        fake_label = t.zeros(b_size, device=device)
+
+        pred_real_frame_label = netFD(y)
+        pred_real_temp_label = netTD(t.cat((data, y), dim=1))
+        errFD_real = criterion(pred_real_frame_label, real_label)
+        errTD_real = criterion(pred_real_temp_label, real_label)
+        inc_acc_FD += accuracy_criterion(pred_real_frame_label, real_label)
+        inc_acc_TD += accuracy_criterion(pred_real_temp_label, real_label)
+        # Calculate gradients for backpropagation.
+        errFD_real.backward()
+        errTD_real.backward()
+
+        # Sample random data from a unit normal distribution.
+        # noise = torch.randn(b_size, params["nz"], 1, 1, device=device)
+        # Generate fake data (images).
+        fake_data = netG(data)
+        # As no gradients w.r.t. the generator parameters are to be
+        # calculated, detach() is used. Hence, only gradients w.r.t. the
+        # discriminator parameters will be calculated.
+        # This is done because the loss functions for the discriminator
+        # and the generator are slightly different.
+        fake_data_detached = fake_data.detach()
+        pred_fake_frame_label = netFD(fake_data_detached)
+        pred_fake_temp_label = netTD(t.cat((data, fake_data_detached), dim=1))
+        errFD_fake = criterion(pred_fake_frame_label, fake_label)
+        errTD_fake = criterion(pred_fake_temp_label, fake_label)
+        inc_acc_FD += accuracy_criterion(pred_fake_frame_label, fake_label)
+        inc_acc_TD += accuracy_criterion(pred_fake_temp_label, fake_label)
+
+        # Calculate gradients for backpropagation.
+        errFD_fake.backward()
+        errTD_fake.backward()
+        # D_G_z1 = output.mean().item()
+
+        # Net discriminator loss.
+        errFD = errFD_real + errFD_fake
+        errTD = errTD_real + errTD_fake
+        # Update discriminator parameters.
+        optimizerFD.step()
+        optimizerTD.step()
+
+        # Make accumalted gradients of the generator zero.
+        netG.zero_grad()
+        # We want the fake data to be classified as real. Hence
+        # real_label are used. (label=1)
+        # No detach() is used here as we want to calculate the gradients w.r.t.
+        # the generator this time.
+        pred_frame_label = netFD(fake_data).view(-1)
+        pred_temp_label = netTD(t.cat((data, fake_data), dim=1)).view(-1)
+        errG = criterion(pred_frame_label, real_label) + criterion(
+            pred_temp_label, real_label
+        )
+        inc_acc_G += inc_acc_FD.reciprocal() + inc_acc_TD.reciprocal()
+        # Gradients for backpropagation are calculated.
+        # Gradients w.r.t. both the generator and the discriminator
+        # parameters are calculated, however, the generator's optimizer
+        # will only update the parameters of the generator. The discriminator
+        # gradients will be set to zero in the next iteration by netD.zero_grad()
+        errG.backward()
+
+        # D_G_z2 = output.mean().item()
+        # Update generator parameters.
+        optimizerG.step()
+
+        # Check progress of training.
+        if i % 50 == 0:
+            print(
+                # f"[{epoch}/{params['nepochs']}]\t"
+                f"Loss_FD: {errFD.item():.4f}\t"
+                + f"Loss_TD: {errTD.item():.4f}\t"
+                + f"Loss_G: {errG.item():.4f}\t"
+                # + f"D(x): {D_x:.4f}\tD(G(z)): {D_G_z1:.14f} / {D_G_z2:.4f}"
+            )
+    return {
+        "train_acc_temp_disc": inc_acc_TD.item(),
+        "train_acc_frame_disc": inc_acc_FD.item(),
+        # "train_acc_gen": inc_acc_G.item(),
     }
 
 
@@ -94,16 +207,11 @@ def train():
         "lr": 0.0002,  # Learning rate for optimizers
         "beta1": 0.5,  # Beta1 hyperparam for Adam optimizer
         "save_epoch": 2,
-    }  # Save step.
+    }
 
     # Use GPU is available else use CPU.
     device = t.device("cuda" if t.cuda.is_available() else "cpu")
     print(device, " will be used.\n")
-
-    # Get the data.
-    dataloader, test_data_loader = get_loaders(
-        "./datasets/data", 64, 64, device, seq_len=params["nc"]
-    )
 
     # Create the generator.
     netG = Generator(params).to(device)
@@ -127,11 +235,6 @@ def train():
     # Binary Cross Entropy loss function.
     criterion = nn.BCELoss()
 
-    fixed_noise = t.randn(64, params["nz"], 1, 1, device=device)
-
-    real_label = 1
-    fake_label = 0
-
     # Optimizer for the discriminator.
     optimizerTD = optim.Adam(
         netTD.parameters(), lr=params["lr"], betas=(params["beta1"], 0.999)
@@ -143,139 +246,27 @@ def train():
     optimizerG = optim.Adam(
         netG.parameters(), lr=params["lr"], betas=(params["beta1"], 0.999)
     )
-
-    iters = 0
-    print("Starting Training Loop...")
-    print("-" * 25)
+    history = TrainingHistory()
 
     for epoch in range(1, params["nepochs"] + 1):
-        dataloader, test_data_loader = get_loaders(
+
+        train_data_loader, test_data_loader = get_loaders(
             "./datasets/data", 32, 64, device, seq_len=params["nc"]
         )
-        for i, (data, y) in enumerate(dataloader):
-
-            y = y.squeeze(2)
-            data = data.squeeze(2)
-            # Transfer data tensor to GPU/CPU (device)
-            real_data = data
-            # Get batch size. Can be different from params['nbsize'] for last batch in epoch.
-            b_size = real_data.size(0)
-
-            # Make accumalated gradients of the discriminator zero.
-            netTD.zero_grad()
-            netFD.zero_grad()
-            # Create labels for the real data. (label=1)
-            label = t.full((b_size,), real_label, device=device).float()
-            pred_frame_label = netFD(y)
-            pred_temp_label = netTD(t.cat((data, y), dim=1))
-            errFD_real = criterion(pred_frame_label, label)
-            errTD_real = criterion(pred_temp_label, label)
-            # Calculate gradients for backpropagation.
-            errFD_real.backward()
-            errTD_real.backward()
-            # D_x = output.mean().item()
-
-            # Sample random data from a unit normal distribution.
-            # noise = torch.randn(b_size, params["nz"], 1, 1, device=device)
-            # Generate fake data (images).
-            fake_data = netG(data)
-            # Create labels for fake data. (label=0)
-            label[:] = fake_label
-            # Calculate the output of the discriminator of the fake data.
-            # As no gradients w.r.t. the generator parameters are to be
-            # calculated, detach() is used. Hence, only gradients w.r.t. the
-            # discriminator parameters will be calculated.
-            # This is done because the loss functions for the discriminator
-            # and the generator are slightly different.
-            fake_data_detached = fake_data.detach()
-            pred_frame_label = netFD(fake_data_detached)
-            pred_temp_label = netTD(
-                t.cat((data, fake_data_detached), dim=1)
-            )
-            errFD_fake = criterion(pred_frame_label, label)
-            errTD_fake = criterion(pred_temp_label, label)
-            # Calculate gradients for backpropagation.
-            errFD_fake.backward()
-            errTD_fake.backward()
-            # D_G_z1 = output.mean().item()
-
-            # Net discriminator loss.
-            errFD = errFD_real + errFD_fake
-            errTD = errTD_real + errTD_fake
-            # Update discriminator parameters.
-            optimizerFD.step()
-            optimizerTD.step()
-
-            # Make accumalted gradients of the generator zero.
-            netG.zero_grad()
-            # We want the fake data to be classified as real. Hence
-            # real_label are used. (label=1)
-            label[:] = real_label
-            # No detach() is used here as we want to calculate the gradients w.r.t.
-            # the generator this time.
-            pred_frame_label = netFD(fake_data).view(-1)
-            pred_temp_label = netTD(t.cat((data, fake_data), dim=1)).view(-1)
-            errG = criterion(pred_frame_label, label) + criterion(
-                pred_temp_label, label
-            )
-            # Gradients for backpropagation are calculated.
-            # Gradients w.r.t. both the generator and the discriminator
-            # parameters are calculated, however, the generator's optimizer
-            # will only update the parameters of the generator. The discriminator
-            # gradients will be set to zero in the next iteration by netD.zero_grad()
-            errG.backward()
-
-            # D_G_z2 = output.mean().item()
-            # Update generator parameters.
-            optimizerG.step()
-
-            # Check progress of training.
-            if i % 50 == 0:
-                print(
-                    f"[{epoch}/{params['nepochs']}]\t"
-                    + f"Loss_FD: {errFD.item():.4f}\t"
-                    + f"Loss_TD: {errTD.item():.4f}\t"
-                    + f"Loss_G: {errG.item():.4f}\t"
-                    # + f"D(x): {D_x:.4f}\tD(G(z)): {D_G_z1:.14f} / {D_G_z2:.4f}"
-                )
-
-            # Save the losses for plotting.
-            G_losses.append(errG.item())
-            D_losses.append((errFD.item(), errTD.item()))
-
-            # Check how the generator is doing by saving G's output on a fixed noise.
-            if iters % 50 == 0:
-                with t.no_grad():
-                    fake_data = netG(data).detach().cpu()
-                    visualize_predictions(data, y, fake_data, epoch)
-            iters += 1
-
-        test(test_data_loader, netG, netFD, netTD, device, epoch)
-        """
-        # Save the model.
-        if epoch % params["save_epoch"] == 0:
-            t.save(
-                {
-                    "generator": netG.state_dict(),
-                    "discriminator": netD.state_dict(),
-                    "optimizerG": optimizerG.state_dict(),
-                    "optimizerD": optimizerD.state_dict(),
-                    "params": params,
-                },
-                os.path.join(curdir, "model/model_epoch_{}.pth".format(epoch)),
-            )
-        """
-
-    """
-    # Save the final trained model.
-    torch.save(
-        {
-            "generator": netG.state_dict(),
-            "discriminator": netD.state_dict(),
-            "optimizerG": optimizerG.state_dict(),
-            "optimizerD": optimizerD.state_dict(),
-            "params": params,
-        },
-        os.path.join(curdir, "model/model_final.pth"),
-    )
-    """
+        train_result = train_single_epoch(
+            dataloader=train_data_loader,
+            netG=netG,
+            netFD=netFD,
+            netTD=netTD,
+            optimizerG=optimizerG,
+            optimizerFD=optimizerFD,
+            optimizerTD=optimizerTD,
+            criterion=criterion,
+            device=device,
+            epoch=epoch,
+        )
+        test_result = test(test_data_loader, netG, netFD, netTD, device, epoch)
+        results = train_result | test_result
+        print(json.dumps(results, indent=4))
+        history.append(results)
+    history.plot()
