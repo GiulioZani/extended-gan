@@ -69,14 +69,15 @@ class Generator(nn.Module):
         super().__init__()
         self.params = params
         # Input is the latent vector Z.
+        
         self.layers = nn.Sequential(
             GaussianNoise(0.001),
             ConvBlock(
-                params["nc"], params["nc"] * 12, kernel_size=4, padding="same"
+                params["nc"], params["nc"] * 24, kernel_size=4, padding="same"
             ),
+            ConvBlock(params["nc"] * 24, params["nc"] * 12, 4, padding="same"),
             ConvBlock(params["nc"] * 12, params["nc"] * 8, 4, padding="same"),
-            ConvBlock(params["nc"] * 8, params["nc"] * 4, 4, padding="same"),
-            ConvBlock(params["nc"] * 4, params["nc"] * 2, 4, padding="same"),
+            ConvBlock(params["nc"] * 8, params["nc"] * 2, 4, padding="same"),
             ConvBlock(params["nc"] * 2, params["nc"] * 1, 4, padding="same"),
             ConvBlock(
                 params["nc"],
@@ -96,7 +97,7 @@ class TemporalDiscriminator(nn.Module):
     def __init__(self, params):
         super().__init__()
         nc = params["nc"]
-        ndf = params["ndf"]
+        ndf = params["ndf"] * 2
 
         def act(x):
             return F.leaky_relu(x, 0.2, True)

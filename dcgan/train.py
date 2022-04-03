@@ -188,7 +188,7 @@ def train_single_epoch(
                 # f"[{epoch}/{params['nepochs']}]\t"
                 f"Loss_FD: {errFD.item():.4f}\t"
                 + f"Loss_TD: {errTD.item():.4f}\t"
-                + f"Loss_G_TD: {errG.item():.4f}\t"
+                + f"Loss_G: {errG.item():.4f}\t"
                 + f"Loss_G_MSE: {real_loss_G.item():.4f}\t"
 
                 # + f"D(x): {D_x:.4f}\tD(G(z)): {D_G_z1:.14f} / {D_G_z2:.4f}"
@@ -212,7 +212,7 @@ def train():
     params = {
         "bsize": 128,  # Batch size during training.
         "imsize": 64,  # Spatial size of training images. All images will be resized to this size during preprocessing.
-        "nc": 6,  # Number of channles in the training images. For coloured images this is 3.
+        "nc": 12,  # Number of channles in the training images. For coloured images this is 3.
         "nz": 100,  # Size of the Z latent vector (the input to the generator).
         "ngf": 64,  # Size of feature maps in the generator. The depth will be multiples of this.
         "ndf": 64,  # Size of features maps in the discriminator. The depth will be multiples of this.
