@@ -51,6 +51,18 @@ class ConvBlock(nn.Module):
     def forward(self, x):
         return self.act(self.layers(x))
 
+class GaussianNoise(nn.Module):
+
+    def __init__(self, variance=0.01):
+        super().__init__()
+        self.variance = variance
+
+    def forward(self, x):
+        noise = t.randn_like(x) * self.variance
+        x = ((noise + x).detach() - x).detach() + x
+        return x
+
+
 
 class Generator(nn.Module):
     def __init__(self, params):
@@ -58,12 +70,14 @@ class Generator(nn.Module):
         self.params = params
         # Input is the latent vector Z.
         self.layers = nn.Sequential(
+            GaussianNoise(0.001),
             ConvBlock(
-                params["nc"], params["nc"] * 8, kernel_size=4, padding="same"
+                params["nc"], params["nc"] * 12, kernel_size=4, padding="same"
             ),
+            ConvBlock(params["nc"] * 12, params["nc"] * 8, 4, padding="same"),
             ConvBlock(params["nc"] * 8, params["nc"] * 4, 4, padding="same"),
             ConvBlock(params["nc"] * 4, params["nc"] * 2, 4, padding="same"),
-            ConvBlock(params["nc"] * 2, params["nc"], 4, padding="same"),
+            ConvBlock(params["nc"] * 2, params["nc"] * 1, 4, padding="same"),
             ConvBlock(
                 params["nc"],
                 params["nc"],

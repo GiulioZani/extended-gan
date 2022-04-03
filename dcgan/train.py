@@ -84,7 +84,7 @@ def test(
     return {
         "val_acc_temp_disc": inc_acc_TD.item(),
         "val_acc_frame_disc": inc_acc_FD.item(),
-        # "val_mse": running_mse.item()
+        "val_mse": running_mse.item()
         # "val_acc_gen": inc_acc_G.item(),
     }
 
@@ -180,13 +180,17 @@ def train_single_epoch(
         # Update generator parameters.
         optimizerG.step()
 
+        real_loss_G = nn.MSELoss()(fake_data, y) 
+
         # Check progress of training.
         if i % 50 == 0:
             print(
                 # f"[{epoch}/{params['nepochs']}]\t"
                 f"Loss_FD: {errFD.item():.4f}\t"
                 + f"Loss_TD: {errTD.item():.4f}\t"
-                + f"Loss_G: {errG.item():.4f}\t"
+                + f"Loss_G_TD: {errG.item():.4f}\t"
+                + f"Loss_G_MSE: {real_loss_G.item():.4f}\t"
+
                 # + f"D(x): {D_x:.4f}\tD(G(z)): {D_G_z1:.14f} / {D_G_z2:.4f}"
             )
     return {
