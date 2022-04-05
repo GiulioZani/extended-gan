@@ -11,10 +11,18 @@ import json
 from .model import (
     weights_init,
     ConvGenerator as Generator,
-    FrameDiscriminator,
-    TemporalDiscriminator
+    # FrameDiscriminator,
+    # TemporalDiscriminator
 )
-from .resnetmodel import VAE as VAEGenerator
+from .resnetmodel import (
+    # VAE as Generator,
+    ResNetTemproalDiscriminator as TemporalDiscriminator,
+    ResNetFrameDiscriminator as FrameDiscriminator)
+    
+
+
+
+
 from .data_loader import get_loaders, DataLoader
 from .utils import (
     visualize_predictions,

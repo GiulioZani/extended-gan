@@ -102,7 +102,58 @@ class GaussianNoise(nn.Module):
 #     def forward(self, x):
 #         return self.layers(x)
 
+class ProbablisticConvGenerator(nn.Module):
+    def __init__(self, params):
+        super().__init__()
+        self.params = params
+        # Input is the latent vector Z.
 
+        self.noise_layer = GaussianNoise(0.001);
+        mlp = 1 # multiplier of the number of channels
+        # random noise matrix with batch size, channels, height, width
+     
+        
+        self.layers = nn.Sequential(
+            # GaussianNoise(0.001),
+            ConvBlock(
+                params["nc"], params["nc"] * 24 * mlp, kernel_size=4, padding="same"
+            ),
+            ConvBlock(params["nc"] * 24 * mlp, params["nc"] * 12* mlp, 4, padding="same"),
+            ConvBlock(params["nc"] * 12* mlp, params["nc"] * 8* mlp, 4, padding="same"),
+            ConvBlock(params["nc"] * 8* mlp, params["nc"] * 2 * mlp, 4, padding="same"),
+            ConvBlock(params["nc"] * mlp *2, params["nc"] * 1, 1),
+            # ConvBlock(params["nc"] * 8, params["nc"] * 12, 1 ),
+            # ConvBlock(params["nc"] * 12, params["nc"] * 24, 1),
+            # ConvBlock(params["nc"] * 24, params["nc"] * 12, 1),
+            # ConvBlock(params["nc"] * 8, params["nc"] * 1, 1),
+
+            ConvBlock(
+                params["nc"],
+                params["nc"],
+                1,
+                padding="same",
+                act=t.sigmoid,
+                batchnorm=False,
+            ),
+        )
+
+    def forward(self, x, noiseVariance = 0.001):
+         
+        # if noiseVariance == None:
+        #     return self.layers(x)
+        
+        # else:
+        #     self.noise_layer.variance = 0.001 # t.FloatTensor(1).uniform_(noiseVariance, noiseVariance*2).to(x.device)
+            # print(self.noise_layer.variance)
+
+        noise_matrix_w_h = 12
+        noise = t.randn( self.params['nc'], noise_matrix_w_h, noise_matrix_w_h)
+        
+        x_concat = t.zeros((x.shape[0], x.shape[1], x.shape[2]+ noise_matrix_w_h, x.shape[3]+ noise_matrix_w_h))
+        x_concat[:,:,:x.shape[2], :x.shape[3]] = x
+        x_concat[:,:,x.shape[2]:, x.shape[3]:] = noise
+
+        return  self.layers(x)
 
 class ConvGenerator(nn.Module):
     def __init__(self, params):
@@ -116,7 +167,7 @@ class ConvGenerator(nn.Module):
      
         
         self.layers = nn.Sequential(
-             
+            GaussianNoise(0.001),
             ConvBlock(
                 params["nc"], params["nc"] * 24 * mlp, kernel_size=4, padding="same"
             ),
@@ -148,12 +199,12 @@ class ConvGenerator(nn.Module):
             self.noise_layer.variance = 0.001 # t.FloatTensor(1).uniform_(noiseVariance, noiseVariance*2).to(x.device)
             # print(self.noise_layer.variance)
 
-        noise_matrix_w_h = 12
-        noise = t.randn( self.params['nc'], noise_matrix_w_h, noise_matrix_w_h)
+        # noise_matrix_w_h = 2
+        # noise = t.randn( self.params['nc'], noise_matrix_w_h, noise_matrix_w_h)
         
-        x_concat = t.zeros((x.shape[0], x.shape[1], x.shape[2]+ noise_matrix_w_h, x.shape[3]+ noise_matrix_w_h))
-        x_concat[:,:,:x.shape[2], :x.shape[3]] = x
-        x_concat[:,:,x.shape[2]:, x.shape[3]:] = noise
+        # x_concat = t.zeros((x.shape[0], x.shape[1], x.shape[2]+ noise_matrix_w_h, x.shape[3]+ noise_matrix_w_h))
+        # x_concat[:,:,:x.shape[2], :x.shape[3]] = x
+        # x_concat[:,:,x.shape[2]:, x.shape[3]:] = noise
 
         return  self.layers(x)
 
