@@ -111,7 +111,9 @@ class ConvGenerator(nn.Module):
         # Input is the latent vector Z.
 
         self.noise_layer = GaussianNoise(0.001);
-        mlp = 2
+        mlp = 1 # multiplier of the number of channels
+        # random noise matrix with batch size, channels, height, width
+     
         
         self.layers = nn.Sequential(
              
@@ -146,7 +148,14 @@ class ConvGenerator(nn.Module):
             self.noise_layer.variance = 0.001 # t.FloatTensor(1).uniform_(noiseVariance, noiseVariance*2).to(x.device)
             # print(self.noise_layer.variance)
 
-        return  self.layers(self.noise_layer(x))
+        noise_matrix_w_h = 12
+        noise = t.randn( self.params['nc'], noise_matrix_w_h, noise_matrix_w_h)
+        
+        x_concat = t.zeros((x.shape[0], x.shape[1], x.shape[2]+ noise_matrix_w_h, x.shape[3]+ noise_matrix_w_h))
+        x_concat[:,:,:x.shape[2], :x.shape[3]] = x
+        x_concat[:,:,x.shape[2]:, x.shape[3]:] = noise
+
+        return  self.layers(x)
 
 
 class TemporalDiscriminator(nn.Module):

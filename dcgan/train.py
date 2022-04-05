@@ -10,11 +10,11 @@ import ipdb
 import json
 from .model import (
     weights_init,
-    ConvGenerator as ConvGenerator,
+    ConvGenerator as Generator,
     FrameDiscriminator,
     TemporalDiscriminator
 )
-from .resnetmodel import VAE as Generator
+from .resnetmodel import VAE as VAEGenerator
 from .data_loader import get_loaders, DataLoader
 from .utils import (
     visualize_predictions,
@@ -122,6 +122,7 @@ def train_single_epoch(
         data = x.squeeze(2)
         # Get batch size. Can be different from params['nbsize'] for last batch in epoch.
         b_size = data.size(0)
+        # ipdb.set_trace()
 
         # Make accumalated gradients of the discriminator zero.
         netTD.zero_grad()
