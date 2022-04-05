@@ -10,10 +10,11 @@ import ipdb
 import json
 from .model import (
     weights_init,
-    Generator,
+    ConvGenerator as ConvGenerator,
     FrameDiscriminator,
-    TemporalDiscriminator,
+    TemporalDiscriminator
 )
+from .resnetmodel import VAE as Generator
 from .data_loader import get_loaders, DataLoader
 from .utils import (
     visualize_predictions,
@@ -22,6 +23,8 @@ from .utils import (
     TrainingHistory,
 )
 
+
+val_mse_validation_data = 10
 
 def test(
     dataloader: DataLoader,
@@ -81,6 +84,8 @@ def test(
     netG.train()
     netTD.train()
     netFD.train()
+    global val_mse_validation_data
+    val_mse_validation_data = running_mse.item()
     return {
         "val_acc_temp_disc": inc_acc_TD.item(),
         "val_acc_frame_disc": inc_acc_FD.item(),
@@ -88,6 +93,9 @@ def test(
         # "val_acc_gen": inc_acc_G.item(),
     }
 
+
+noise = 0.001
+noise_step = 0.005
 
 def train_single_epoch(
     *,
@@ -105,6 +113,10 @@ def train_single_epoch(
     inc_acc_FD = IncrementalAccuracy()
     inc_acc_TD = IncrementalAccuracy()
     inc_acc_G = IncrementalAccuracy()
+    inc_acc_G_MSE = IncrementalAccuracy()
+
+    noise_epoch_added = 0
+
     for i, (x, y) in enumerate(dataloader):
         y = y.squeeze(2)
         data = x.squeeze(2)
@@ -131,7 +143,14 @@ def train_single_epoch(
         # Sample random data from a unit normal distribution.
         # noise = torch.randn(b_size, params["nz"], 1, 1, device=device)
         # Generate fake data (images).
-        fake_data = netG(data)
+        global noise, val_mse_validation_data
+        if val_mse_validation_data < 0.008 and noise_epoch_added != epoch:
+            noise = noise + noise_step
+            print('curriculum noise:', noise)
+            noise_epoch_added = epoch
+        fake_data = netG(data, noise)
+        # print(fake_data.shape)
+        # ipdb.set_trace()
         # As no gradients w.r.t. the generator parameters are to be
         # calculated, detach() is used. Hence, only gradients w.r.t. the
         # discriminator parameters will be calculated.
@@ -167,7 +186,7 @@ def train_single_epoch(
         pred_temp_label = netTD(t.cat((data, fake_data), dim=1)).view(-1)
         errG = criterion(pred_frame_label, real_label) + criterion(
             pred_temp_label, real_label
-        )
+        ) 
         inc_acc_G += inc_acc_FD.reciprocal() + inc_acc_TD.reciprocal()
         # Gradients for backpropagation are calculated.
         # Gradients w.r.t. both the generator and the discriminator
@@ -181,6 +200,11 @@ def train_single_epoch(
         optimizerG.step()
 
         real_loss_G = nn.MSELoss()(fake_data, y) 
+        # inc_acc_G_MSE += accuracy_criterion(fake_data, y)
+
+        # if real_loss_G.item() < 0.005:
+        #     noise = noise + noise_step
+        #     print('curriculum noise:', noise)
 
         # Check progress of training.
         if i % 50 == 0:
@@ -210,10 +234,10 @@ def train():
 
     # Parameters to define the model.
     params = {
-        "bsize": 128,  # Batch size during training.
+        "bsize": 256,  # Batch size during training.
         "imsize": 64,  # Spatial size of training images. All images will be resized to this size during preprocessing.
-        "nc": 12,  # Number of channles in the training images. For coloured images this is 3.
-        "nz": 100,  # Size of the Z latent vector (the input to the generator).
+        "nc": 6,  # Number of sequences to predic
+        "nz": 64,  # Size of the Z latent vector (the input to the generator).
         "ngf": 64,  # Size of feature maps in the generator. The depth will be multiples of this.
         "ndf": 64,  # Size of features maps in the discriminator. The depth will be multiples of this.
         "nepochs": 10,  # Number of training epochs.
