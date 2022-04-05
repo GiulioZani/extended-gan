@@ -21,7 +21,8 @@ def weights_init(w):
         nn.init.constant_(w.bias.data, 0)
     elif classname.find("axial") != -1 :
         nn.init.normal_(w.weight.data, 1.0, 0.02)
-
+    # elif classname.find("c") != -1 :
+    #     nn.init.normal_(w.weight.data, 1.0, 0.02)
 
 class ConvBlock(nn.Module):
     def __init__(
@@ -116,9 +117,9 @@ class ProbablisticConvGenerator(nn.Module):
         self.layers = nn.Sequential(
             # GaussianNoise(0.001),
             ConvBlock(
-                params["nc"], params["nc"] * 24 * mlp, kernel_size=4, padding="same"
+                params["nc"], params["nc"] * 18 * mlp, kernel_size=4, padding="same"
             ),
-            ConvBlock(params["nc"] * 24 * mlp, params["nc"] * 12* mlp, 4, padding="same"),
+            ConvBlock(params["nc"] * 18 * mlp, params["nc"] * 12* mlp, 4, padding="same"),
             ConvBlock(params["nc"] * 12* mlp, params["nc"] * 8* mlp, 4, padding="same"),
             ConvBlock(params["nc"] * 8* mlp, params["nc"] * 2 * mlp, 4, padding="same"),
             ConvBlock(params["nc"] * mlp *2, params["nc"] * 1, 1),
@@ -169,9 +170,9 @@ class ConvGenerator(nn.Module):
         self.layers = nn.Sequential(
             GaussianNoise(0.001),
             ConvBlock(
-                params["nc"], params["nc"] * 24 * mlp, kernel_size=4, padding="same"
+                params["nc"], params["nc"] * 18 * mlp, kernel_size=4, padding="same"
             ),
-            ConvBlock(params["nc"] * 24 * mlp, params["nc"] * 12* mlp, 4, padding="same"),
+            ConvBlock(params["nc"] * 18 * mlp, params["nc"] * 12* mlp, 4, padding="same"),
             ConvBlock(params["nc"] * 12* mlp, params["nc"] * 8* mlp, 4, padding="same"),
             ConvBlock(params["nc"] * 8* mlp, params["nc"] * 2 * mlp, 4, padding="same"),
             ConvBlock(params["nc"] * mlp *2, params["nc"] * 1, 1),
@@ -191,20 +192,7 @@ class ConvGenerator(nn.Module):
         )
 
     def forward(self, x, noiseVariance = 0.001):
-         
-        if noiseVariance == None:
-            return self.layers(x)
-        
-        else:
-            self.noise_layer.variance = 0.001 # t.FloatTensor(1).uniform_(noiseVariance, noiseVariance*2).to(x.device)
-            # print(self.noise_layer.variance)
-
-        # noise_matrix_w_h = 2
-        # noise = t.randn( self.params['nc'], noise_matrix_w_h, noise_matrix_w_h)
-        
-        # x_concat = t.zeros((x.shape[0], x.shape[1], x.shape[2]+ noise_matrix_w_h, x.shape[3]+ noise_matrix_w_h))
-        # x_concat[:,:,:x.shape[2], :x.shape[3]] = x
-        # x_concat[:,:,x.shape[2]:, x.shape[3]:] = noise
+       
 
         return  self.layers(x)
 

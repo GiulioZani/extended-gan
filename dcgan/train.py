@@ -1,3 +1,4 @@
+import imp
 import torch as t
 import torch.nn as nn
 import torch.optim as optim
@@ -10,16 +11,22 @@ import ipdb
 import json
 from .model import (
     weights_init,
-    ConvGenerator as Generator,
-    # FrameDiscriminator,
+    ProbablisticConvGenerator as Generator,
+
+    FrameDiscriminator,
     # TemporalDiscriminator
 )
 from .resnetmodel import (
-    # VAE as Generator,
-    ResNetTemproalDiscriminator as TemporalDiscriminator,
-    ResNetFrameDiscriminator as FrameDiscriminator)
+    VAE as VAEGenerator,
+    # ResNetTemproalDiscriminator as TemporalDiscriminator,
+    # ResNetFrameDiscriminator as FrameDiscriminator
+    )
     
-
+from .convmodel import (
+    
+    # EncoderDecoderConvLSTM as Generator,
+    ConvLSTMTemporalDiscriminator as TemporalDiscriminator,
+    )
 
 
 
@@ -141,10 +148,13 @@ def train_single_epoch(
 
         pred_real_frame_label = netFD(y)
         pred_real_temp_label = netTD(t.cat((data, y), dim=1))
+        # ipdb.set_trace()
+
         errFD_real = criterion(pred_real_frame_label, real_label)
         errTD_real = criterion(pred_real_temp_label, real_label)
         inc_acc_FD += accuracy_criterion(pred_real_frame_label, real_label)
         inc_acc_TD += accuracy_criterion(pred_real_temp_label, real_label)
+        # inc_acc_G_MSE += accuracy_criterion(fake_data, y)
         # Calculate gradients for backpropagation.
         errFD_real.backward()
         errTD_real.backward()
@@ -152,12 +162,12 @@ def train_single_epoch(
         # Sample random data from a unit normal distribution.
         # noise = torch.randn(b_size, params["nz"], 1, 1, device=device)
         # Generate fake data (images).
-        global noise, val_mse_validation_data
-        if val_mse_validation_data < 0.008 and noise_epoch_added != epoch:
-            noise = noise + noise_step
-            print('curriculum noise:', noise)
-            noise_epoch_added = epoch
-        fake_data = netG(data, noise)
+        # global noise, val_mse_validation_data
+        # if val_mse_validation_data < 0.008 and noise_epoch_added != epoch:
+        #     noise = noise + noise_step
+        #     print('curriculum noise:', noise)
+        #     noise_epoch_added = epoch
+        fake_data = netG(data)
         # print(fake_data.shape)
         # ipdb.set_trace()
         # As no gradients w.r.t. the generator parameters are to be
@@ -196,7 +206,7 @@ def train_single_epoch(
         errG = criterion(pred_frame_label, real_label) + criterion(
             pred_temp_label, real_label
         ) 
-        inc_acc_G += inc_acc_FD.reciprocal() + inc_acc_TD.reciprocal()
+        inc_acc_G += inc_acc_FD.reciprocal() + inc_acc_TD.reciprocal() #+ inc_acc_G_MSE
         # Gradients for backpropagation are calculated.
         # Gradients w.r.t. both the generator and the discriminator
         # parameters are calculated, however, the generator's optimizer
@@ -224,6 +234,7 @@ def train_single_epoch(
                 + f"Loss_G: {errG.item():.4f}\t"
                 + f"Loss_G_MSE: {real_loss_G.item():.4f}\t"
 
+                # + f"Loss_G_ICN_MSE: {inc_acc_G_MSE.item():.4f}\t"
                 # + f"D(x): {D_x:.4f}\tD(G(z)): {D_G_z1:.14f} / {D_G_z2:.4f}"
             )
     return {
@@ -243,12 +254,12 @@ def train():
 
     # Parameters to define the model.
     params = {
-        "bsize": 256,  # Batch size during training.
+        "bsize": 32,  # Batch size during training.
         "imsize": 64,  # Spatial size of training images. All images will be resized to this size during preprocessing.
         "nc": 6,  # Number of sequences to predic
         "nz": 64,  # Size of the Z latent vector (the input to the generator).
         "ngf": 64,  # Size of feature maps in the generator. The depth will be multiples of this.
-        "ndf": 64,  # Size of features maps in the discriminator. The depth will be multiples of this.
+        "ndf": 32,  # Size of features maps in the discriminator. The depth will be multiples of this.
         "nepochs": 10,  # Number of training epochs.
         "lr": 0.0002,  # Learning rate for optimizers
         "beta1": 0.5,  # Beta1 hyperparam for Adam optimizer
