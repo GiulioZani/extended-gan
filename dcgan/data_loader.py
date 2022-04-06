@@ -13,9 +13,12 @@ class DataLoader:
         *,
         crop=64,
         shuffle: bool = True,
-        seq_len: int = 4
+        in_seq_len: int = 4,
+        out_seq_len: int = 4
     ):
-        self.seq_len = seq_len
+        self.in_seq_len = in_seq_len
+        self.out_seq_len = out_seq_len
+        self.tot_seq_len = in_seq_len + out_seq_len
         self.crop = crop
         self.data_folder = folder
         self.device = device
@@ -42,7 +45,7 @@ class DataLoader:
         return result
 
     def __segmentify(self, data: t.Tensor) -> t.Tensor:
-        data = data[: (len(data) // 2 * self.seq_len) * 2 * self.seq_len]
+        data = data[: (len(data) // 2 * self.tot_seq_len) * 2 * self.tot_seq_len]
         if self.crop is not None:
             data = data[:, :, : self.crop, : self.crop]
 
@@ -50,9 +53,9 @@ class DataLoader:
             tuple(
                 el
                 for el in tuple(
-                    data[i : i + 2 * self.seq_len] for i in range(len(data))
+                    data[i : i + self.tot_seq_len] for i in range(len(data))
                 )
-                if len(el) == 2 * self.seq_len
+                if len(el) == self.tot_seq_len
             )
         )
         return segments
@@ -67,7 +70,7 @@ class DataLoader:
         if len(result) == 0:
             raise StopIteration
         result = t.stack(
-            tuple(t.stack((s[: self.seq_len], s[self.seq_len :])) for s in result)
+            tuple(t.stack((s[: self.in_seq_len], s[self.out_seq_len :])) for s in result)
         ).transpose(0, 1)
         rand_indices = (
             t.randperm(result.shape[1]) if self.shuffle else t.arange(result.shape[1])
@@ -93,8 +96,8 @@ def get_loaders(
     test_folder = os.path.join(data_location, "test")
     train_folder = os.path.join(data_location, "train")
     return (
-        DataLoader(train_folder, train_batch_size, device, seq_len=seq_len),
-        DataLoader(test_folder, test_batch_size, device, seq_len=seq_len),
+        DataLoader(train_folder, train_batch_size, device, in_seq_len=seq_len, out_seq_len=4),
+        DataLoader(test_folder, test_batch_size, device, in_seq_len=seq_len, out_seq_len=4),
     )
 
 
