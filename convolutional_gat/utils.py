@@ -43,12 +43,7 @@ def term_display(y, y_hat):
 
     plt.subplots_adjust(left=0, right=1, top=1, bottom=0)
     plt.savefig("/tmp/im1.png")
-    print(
-        climage.convert(
-            "/tmp/im1.png",
-            is_unicode=True,
-        )
-    )
+    print(climage.convert("/tmp/im1.png", is_unicode=True,))
 
 
 def visualize_predictions(
@@ -89,9 +84,7 @@ def visualize_predictions(
                     for i, row in enumerate(ax):
                         for j, col in enumerate(row):
                             # ipdb.set_trace()
-                            col.imshow(
-                                to_plot[i].cpu().detach().numpy()[:, :, j, 1]
-                            )
+                            col.imshow(to_plot[i].cpu().detach().numpy()[:, :, j, 1])
 
                     row_labels = ["x", "y", "preds"]
                     for ax_, row in zip(ax[:, 0], row_labels):
@@ -118,12 +111,10 @@ def plot_history(
 ):
     plt.clf()
     plt.plot(
-        history["train_loss"],
-        label="Train loss",
+        history["train_loss"], label="Train loss",
     )
     plt.plot(
-        history["val_loss"],
-        label="Val loss",
+        history["val_loss"], label="Val loss",
     )
     plt.legend()
     plt.title(title)

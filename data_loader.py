@@ -67,14 +67,10 @@ class DataLoader:
         if len(result) == 0:
             raise StopIteration
         result = t.stack(
-            tuple(
-                t.stack((s[: self.seq_len], s[self.seq_len :])) for s in result
-            )
+            tuple(t.stack((s[: self.seq_len], s[self.seq_len :])) for s in result)
         ).transpose(0, 1)
         rand_indices = (
-            t.randperm(result.shape[1])
-            if self.shuffle
-            else t.arange(result.shape[1])
+            t.randperm(result.shape[1]) if self.shuffle else t.arange(result.shape[1])
         )
         results = (
             result[0][rand_indices].float().to(self.device),

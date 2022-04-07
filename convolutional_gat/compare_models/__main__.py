@@ -45,13 +45,9 @@ def plot(out_path, loader, models):
                 to_plot = [t.pow(tp, 1 / loader.power) for tp in to_plot]
                 for i, row in enumerate(ax):
                     for j, col in enumerate(row):
-                        col.imshow(
-                            to_plot[i].cpu().detach().numpy()[:, :, j, 1]
-                        )
+                        col.imshow(to_plot[i].cpu().detach().numpy()[:, :, j, 1])
 
-                row_labels = ["y"] + [
-                    " ".join(f.split("_")[1:]) for f in folders
-                ]
+                row_labels = ["y"] + [" ".join(f.split("_")[1:]) for f in folders]
                 for ax_, row in zip(ax[:, 0], row_labels):
                     ax_.set_ylabel(row)
 
@@ -113,8 +109,7 @@ def compare_models(
             model_path = os.path.join(data_folder, "model.pt")
             config = {}
             exec(
-                open(os.path.join(data_folder, "config.py")).read(),
-                config,
+                open(os.path.join(data_folder, "config.py")).read(), config,
             )
             model_class = model_classes[config["MODEL_TYPE"]]
             model = model_class(
@@ -131,9 +126,7 @@ def compare_models(
             model.eval()
             models.append(model)
         if not plot_only:
-            results = get_metrics(
-                models, folders, preprocessed_folder, downsample_size
-            )
+            results = get_metrics(models, folders, preprocessed_folder, downsample_size)
             print(json_to_table(results, out_path))
             print(json.dumps(results, indent=4))
             with open(os.path.join(out_path, "results.json"), "w") as f:
