@@ -17,10 +17,10 @@ from .model import (
 from .data_loader import get_loaders, DataLoader
 from .utils import (
     visualize_predictions,
-    IncrementalAccuracy,
     accuracy_criterion,
     TrainingHistory,
 )
+from .metrics import MetricsManager, IncrementalTuple
 
 
 def test(
@@ -37,10 +37,11 @@ def test(
     netFD.eval()
     netTD.eval()
 
-    inc_acc_FD = IncrementalAccuracy()
-    inc_acc_TD = IncrementalAccuracy()
-    inc_acc_G = IncrementalAccuracy()
-    running_mse = IncrementalAccuracy()
+    fd_metrics = MetricsManager(("accuracy",), prefix="frame_disc")
+    td_metrics = MetricsManager(("accuracy",), prefix="temp_disc")
+    pred_metrics = MetricsManager(
+        ("accuracy", "precision", "recall", "mse"), prefix="pred"
+    )
     with t.no_grad():
         for i, (data, y) in enumerate(dataloader):
             y = y.squeeze(2)
@@ -56,37 +57,24 @@ def test(
 
             pred_real_frame_label = netFD(y)
             pred_real_temp_label = netTD(t.cat((data, y), dim=1))
-            acc_FD_real = accuracy_criterion(pred_real_frame_label, real_label)
-            acc_TD_real = accuracy_criterion(pred_real_temp_label, real_label)
+
+            fd_metrics.update(pred_real_frame_label, real_label)
+            td_metrics.update(pred_real_temp_label, real_label)
 
             fake_data = netG(data)
-            diff_square = (fake_data.flatten() - y.flatten()) ** 2
-            running_mse += IncrementalAccuracy(
-                t.tensor(
-                    [diff_square.sum(), diff_square.numel()], dtype=t.float
-                )
-            )
             fake_data_detached = fake_data.detach()
+            pred_metrics.update(y, fake_data)
             pred_fake_frame_label = netFD(fake_data_detached)
             pred_fake_temp_label = netTD(
                 t.cat((data, fake_data_detached), dim=1)
             )
-            acc_FD_fake = accuracy_criterion(pred_fake_frame_label, fake_label)
-            acc_TD_fake = accuracy_criterion(pred_fake_temp_label, fake_label)
+            fd_metrics.update(pred_fake_frame_label, fake_label)
+            td_metrics.update(pred_fake_temp_label, fake_label)
 
-            inc_acc_FD += acc_FD_real + acc_FD_fake
-            inc_acc_TD += acc_TD_real + acc_TD_fake
-
-            inc_acc_G += inc_acc_FD.reciprocal() + inc_acc_TD.reciprocal()
     netG.train()
     netTD.train()
     netFD.train()
-    return {
-        "val_acc_temp_disc": inc_acc_TD.item(),
-        "val_acc_frame_disc": inc_acc_FD.item(),
-        # "val_mse": running_mse.item()
-        # "val_acc_gen": inc_acc_G.item(),
-    }
+    return fd_metrics.results() | td_metrics.results() | pred_metrics.results()
 
 
 def train_single_epoch(
@@ -102,9 +90,9 @@ def train_single_epoch(
     device: t.device,
     epoch: int,
 ):
-    inc_acc_FD = IncrementalAccuracy()
-    inc_acc_TD = IncrementalAccuracy()
-    inc_acc_G = IncrementalAccuracy()
+    pred_metrics = MetricsManager(("mse",), prefix="train")
+    inc_acc_FD = IncrementalTuple()
+    inc_acc_TD = IncrementalTuple()
     for i, (x, y) in enumerate(dataloader):
         y = y.squeeze(2)
         data = x.squeeze(2)
@@ -132,6 +120,7 @@ def train_single_epoch(
         # noise = torch.randn(b_size, params["nz"], 1, 1, device=device)
         # Generate fake data (images).
         fake_data = netG(data)
+        pred_metrics.update(y, fake_data)
         # As no gradients w.r.t. the generator parameters are to be
         # calculated, detach() is used. Hence, only gradients w.r.t. the
         # discriminator parameters will be calculated.
@@ -168,12 +157,6 @@ def train_single_epoch(
         errG = criterion(pred_frame_label, real_label) + criterion(
             pred_temp_label, real_label
         )
-        inc_acc_G += inc_acc_FD.reciprocal() + inc_acc_TD.reciprocal()
-        # Gradients for backpropagation are calculated.
-        # Gradients w.r.t. both the generator and the discriminator
-        # parameters are calculated, however, the generator's optimizer
-        # will only update the parameters of the generator. The discriminator
-        # gradients will be set to zero in the next iteration by netD.zero_grad()
         errG.backward()
 
         # D_G_z2 = output.mean().item()
@@ -189,11 +172,7 @@ def train_single_epoch(
                 + f"Loss_G: {errG.item():.4f}\t"
                 # + f"D(x): {D_x:.4f}\tD(G(z)): {D_G_z1:.14f} / {D_G_z2:.4f}"
             )
-    return {
-        # "train_acc_temp_disc": inc_acc_TD.item(),
-        # "train_acc_frame_disc": inc_acc_FD.item(),
-        # "train_acc_gen": inc_acc_G.item(),
-    }
+    return pred_metrics.results()
 
 
 def train():
@@ -208,7 +187,7 @@ def train():
     params = {
         "bsize": 128,  # Batch size during training.
         "imsize": 64,  # Spatial size of training images. All images will be resized to this size during preprocessing.
-        "nc": 6,  # Number of channles in the training images. For coloured images this is 3.
+        "nc": 4,  # Number of channles in the training images. For coloured images this is 3.
         "nz": 100,  # Size of the Z latent vector (the input to the generator).
         "ngf": 64,  # Size of feature maps in the generator. The depth will be multiples of this.
         "ndf": 64,  # Size of features maps in the discriminator. The depth will be multiples of this.
@@ -260,7 +239,12 @@ def train():
     for epoch in range(1, params["nepochs"] + 1):
 
         train_data_loader, test_data_loader = get_loaders(
-            "./datasets/data", 32, 64, device, seq_len=params["nc"]
+            "./datasets/data",
+            32,
+            64,
+            device,
+            in_seq_len=params["nc"],
+            out_seq_len=params["nc"],
         )
         train_result = train_single_epoch(
             dataloader=train_data_loader,
