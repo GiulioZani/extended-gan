@@ -45,12 +45,10 @@ class DataLoader:
         return result
 
     def __segmentify(self, data: t.Tensor) -> t.Tensor:
-        data = data[
-            : (len(data) // 2 * self.tot_seq_len) * 2 * self.tot_seq_len
-        ]
+        data = data[: (len(data) // self.tot_seq_len) * self.tot_seq_len]
         if self.crop is not None:
             data = data[:, :, : self.crop, : self.crop]
-
+        """
         segments = t.stack(
             tuple(
                 el
@@ -59,6 +57,10 @@ class DataLoader:
                 )
                 if len(el) == self.tot_seq_len
             )
+        )
+        """
+        segments = data.view(
+            -1, self.tot_seq_len, data.shape[1], data.shape[2], data.shape[3]
         )
         return segments
 
