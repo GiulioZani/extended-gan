@@ -125,8 +125,11 @@ def test():
         32,
         64,
         t.device("cuda" if t.cuda.is_available() else "cpu"),
+        in_seq_len=8,
+        out_seq_len=4
     )
     for i, (x, y) in enumerate(tqdm(train_dl)):
+        ipdb.set_trace()
         # plt.imshow(x[0, 0, 0].cpu())
         # plt.show()
         # print(x.shape)
