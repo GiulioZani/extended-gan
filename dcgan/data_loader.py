@@ -106,7 +106,7 @@ def get_loaders(
             device,
             in_seq_len=in_seq_len,
             out_seq_len=out_seq_len,
-            crop=64,
+            crop=crop,
         ),
         DataLoader(
             test_folder,
@@ -114,7 +114,7 @@ def get_loaders(
             device,
             in_seq_len=in_seq_len,
             out_seq_len=out_seq_len,
-            crop=64,
+            crop=crop,
         ),
     )
 
