@@ -49,22 +49,6 @@ class DataLoader:
         data = data[: (len(data) // self.tot_seq_len) * self.tot_seq_len]
         if self.crop is not None:
             data = data[:, :, : self.crop, : self.crop]
-        """
-        segments = t.stack(
-            tuple(
-                el
-                for el in tuple(
-                    data[i : i + self.tot_seq_len] for i in range(len(data))
-                )
-                if len(el) == self.tot_seq_len
-            )
-        )
-        """
-        """
-        segments = data.view(
-            -1, self.tot_seq_len, data.shape[1], data.shape[2], data.shape[3]
-        )
-        """
         return data 
 
     def __next__(self) -> tuple[t.Tensor, t.Tensor]:
@@ -88,7 +72,6 @@ class DataLoader:
                 for s in result
             )
         )
-
         rand_indices = (
             t.randperm(result.shape[0])
             if self.shuffle
@@ -110,6 +93,7 @@ def get_loaders(
     test_batch_size: int,
     device: t.device,
     *,
+    crop: int = 64,
     in_seq_len: int = 12,
     out_seq_len: int = 6
 ) -> tuple[DataLoader, DataLoader]:
@@ -122,6 +106,7 @@ def get_loaders(
             device,
             in_seq_len=in_seq_len,
             out_seq_len=out_seq_len,
+            crop=64,
         ),
         DataLoader(
             test_folder,
@@ -129,6 +114,7 @@ def get_loaders(
             device,
             in_seq_len=in_seq_len,
             out_seq_len=out_seq_len,
+            crop=64,
         ),
     )
 
