@@ -2,6 +2,7 @@ import os
 import torch as t
 import ipdb
 import matplotlib.pyplot as plt
+from tqdm import tqdm
 
 
 class DataLoader:
@@ -59,34 +60,43 @@ class DataLoader:
             )
         )
         """
+        """
         segments = data.view(
             -1, self.tot_seq_len, data.shape[1], data.shape[2], data.shape[3]
         )
-        return segments
+        """
+        return data 
 
     def __next__(self) -> tuple[t.Tensor, t.Tensor]:
-        if self.remainder.shape[1] == 0:
+        if self.remainder.shape[0] == 0:
             data = self.__read_next_file()
         else:
             data = self.remainder
-        self.remainder = data[self.batch_size :]
-        result = data[: self.batch_size]
+        self.remainder = data[self.batch_size:]
+        result = t.stack(tuple(data[i:i+self.tot_seq_len] for i in range(self.batch_size)))
         if len(result) == 0:
             raise StopIteration
-        result = t.stack(
+        xs = t.stack(
             tuple(
-                t.stack((s[: self.in_seq_len], s[self.out_seq_len :]))
+                s[: self.in_seq_len]
                 for s in result
             )
-        ).transpose(0, 1)
+        )
+        ys = t.stack(
+            tuple(
+                s[self.in_seq_len:]
+                for s in result
+            )
+        )
+
         rand_indices = (
-            t.randperm(result.shape[1])
+            t.randperm(result.shape[0])
             if self.shuffle
-            else t.arange(result.shape[1])
+            else t.arange(result.shape[0])
         )
         results = (
-            result[0][rand_indices].float().to(self.device),
-            result[1][rand_indices].float().to(self.device),
+            xs[rand_indices].float().to(self.device),
+            ys[rand_indices].float().to(self.device),
         )
         return results
 
@@ -125,16 +135,17 @@ def get_loaders(
 
 def test():
     train_dl, test_dl = get_loaders(
-        "../datasets/data",
+        "/mnt/tmp/multi_channel_train_test",
         32,
         64,
         t.device("cuda" if t.cuda.is_available() else "cpu"),
     )
-    for (x, y) in test_dl:
-        plt.imshow(x[0, 0, 0].cpu())
-        plt.show()
-        print(x.shape)
-        return
+    for i, (x, y) in enumerate(tqdm(train_dl)):
+        # plt.imshow(x[0, 0, 0].cpu())
+        # plt.show()
+        # print(x.shape)
+        # return
+        print(f"iteration: {i}")
 
 
 if __name__ == "__main__":
