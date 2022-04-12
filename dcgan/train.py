@@ -173,11 +173,11 @@ def test(
     return {
         "Temp. Disc. Accuracy": inc_acc_TD.item(),
         "Frame Dis. Accuracy": inc_acc_FD.item(),
-        "MSE": loss_model,
-        "Precision": precision,
-        "Recall": recall,
-        "Accuracy": accuracy,
-        "f1": f1,
+        "MSE": float(loss_model),
+        "Precision": float(precision),
+        "Recall": float(recall),
+        "Accuracy": float(accuracy),
+        "f1": float(f1),
     }
 
 
