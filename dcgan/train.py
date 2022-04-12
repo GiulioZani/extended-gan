@@ -104,10 +104,15 @@ def test(
 
     with t.no_grad():
         for i, (x, y) in enumerate(dataloader):
-            y = y.squeeze(2)
-            x = x.squeeze(2)
-            real_data = x
-            b_size = real_data.size(0)
+            # select the first n channels
+            y = y[:,:,0:params['nc'],...]
+            x = x[:,:,0:params['nc'],...]
+            # all the past data, not all is passed to the generator (discriminator gets all)
+            past_x = x
+            x = x[:,params['in_seq_len']-params['generator_in_seq_len']:,...]
+            
+
+            b_size = x.size(0)
             real_label = t.zeros(b_size, device=device) + 1
             fake_label = t.zeros(b_size, device=device)
 
@@ -123,7 +128,7 @@ def test(
             pred_y = netG(x).detach()
             pred_fake_frame_label = netFD(pred_y)
             pred_fake_temp_label = netTD(
-                t.cat((x, pred_y), dim=1)
+                t.cat((past_x, pred_y), dim=1)
             )
  
             # fd_metrics.update(pred_fake_frame_label, fake_label)

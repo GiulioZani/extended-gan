@@ -103,9 +103,9 @@ class ConvGenerator(nn.Module):
         self.layers = nn.Sequential(
             GaussianNoise(params['gaussian_noise_std']),
             ConvBlock(
-                params['generator_in_seq_len'], mlp * 18 * mlp, kernel_size=4, padding='same', dropout=False
+                params['generator_in_seq_len'], mlp * 24 * mlp, kernel_size=4, padding='same', dropout=False
             ),
-            ConvBlock(mlp * 18 * mlp, mlp * 12* mlp, 4, padding="same", dropout=False),
+            ConvBlock(mlp * 24 * mlp, mlp * 12* mlp, 4, padding="same", dropout=False),
             ConvBlock(mlp * 12* mlp, mlp * 8* mlp, 4, padding="same", dropout=False),
             ConvBlock(mlp * 8* mlp, mlp * 2 * mlp, 4, padding="same", dropout=False),
             ConvBlock(
