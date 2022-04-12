@@ -239,7 +239,7 @@ def train():
     for epoch in range(1, params["nepochs"] + 1):
 
         train_data_loader, test_data_loader = get_loaders(
-            "./datasets/data",
+            "/mnt/tmp/multi_channel_train_test",
             32,
             64,
             device,
