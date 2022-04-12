@@ -1,8 +1,17 @@
 from types import SimpleNamespace
+
+import ipdb
 import torch
 import torch as t
-from torch import nn, optim
 import torch.nn.functional as F
+import torchvision
+
+from numpy import prod
+from torch import nn, optim
+from dcgan.dense_layer import AVGPoolConcatDenseLayer
+
+from .conv2dmodel import GaussianNoise
+
 
 class ResizeConv2d(nn.Module):
 
@@ -26,9 +35,11 @@ class BasicBlockEnc(nn.Module):
 
         self.conv1 = nn.Conv2d(in_planes, planes, kernel_size=3, stride=stride, padding=1, bias=False)
         self.bn1 = nn.BatchNorm2d(planes)
+        self.elu1 = nn.ELU()
+
         self.conv2 = nn.Conv2d(planes, planes, kernel_size=3, stride=1, padding=1, bias=False)
         self.bn2 = nn.BatchNorm2d(planes)
-
+        self.elu2 = nn.ELU()
         if stride == 1:
             self.shortcut = nn.Sequential()
         else:
@@ -38,10 +49,12 @@ class BasicBlockEnc(nn.Module):
             )
 
     def forward(self, x):
-        out = torch.relu(self.bn1(self.conv1(x)))
+
+        
+        out = self.elu1(self.bn1(self.conv1(x)))
         out = self.bn2(self.conv2(out))
         out += self.shortcut(x)
-        out = torch.relu(out)
+        out = self.elu2(out)
         return out
 
 class BasicBlockDec(nn.Module):
@@ -53,6 +66,7 @@ class BasicBlockDec(nn.Module):
 
         self.conv2 = nn.Conv2d(in_planes, in_planes, kernel_size=3, stride=1, padding=1, bias=False)
         self.bn2 = nn.BatchNorm2d(in_planes)
+
         # self.bn1 could have been placed here, but that messes up the order of the layers when printing the class
 
         if stride == 1:
@@ -74,6 +88,86 @@ class BasicBlockDec(nn.Module):
         out = torch.relu(out)
         return out
 
+class ResNetAutoEncoder(nn.Module):
+
+    def __init__(self, params, num_blocks=[2,2,2,2,2,2,2,2]) -> None:
+        super().__init__()
+        self.params = params
+        self.in_planes = 64
+        self.is_probalistic = params['probalistic_gen'] #if params['probalistic_gen']  != None else False
+        mlp = 1
+
+        self.conv1 = nn.Conv2d(self.params['out_seq_len'], 64, kernel_size=3, stride=2, padding=1, bias=True) #why bias is false?
+        self.bn1 = nn.BatchNorm2d(64)
+        self.l1 = self.make_encoder_layer(BasicBlockEnc, 64, num_blocks[0], stride=1)
+
+        if(self.params['add_gaussian_noise_to_gen']):
+            self.gaussianNoise = GaussianNoise(self.params['gaussian_noise_std'])
+
+        self.encoder = nn.Sequential(
+            self.make_encoder_layer(BasicBlockEnc, 64, num_blocks[0], stride=1),
+            self.make_encoder_layer(BasicBlockEnc, 128, num_blocks[1], stride=2),
+            self.make_decoder_layer(BasicBlockEnc, 256, num_blocks[2], stride=2),
+            self.make_decoder_layer(BasicBlockEnc, 512, num_blocks[3], stride=2),
+        )
+
+        self.decoder = nn.Sequential(
+            self.make_decoder_layer(BasicBlockDec, 512, num_blocks[4], stride=1),
+            self.make_decoder_layer(BasicBlockDec, 256, num_blocks[5], stride=2),
+            self.make_encoder_layer(BasicBlockDec, 128, num_blocks[6], stride=2),
+            self.make_decoder_layer(BasicBlockDec, 64, num_blocks[7], stride=2),
+        )
+        self.finalLayer = ResizeConv2d(64, self.params['out_seq_len'], kernel_size=3, scale_factor=2)
+
+    def make_encoder_layer(self, BasicBlockEnc, planes, num_Blocks, stride):
+        strides = [stride] + [1]*(num_Blocks-1)
+        layers = []
+        for stride in strides:
+            layers += [BasicBlockEnc(self.in_planes, stride)]
+            self.in_planes = planes
+        return nn.Sequential(*layers)
+
+    def make_decoder_layer(self, BasicBlockDec, planes, num_Blocks, stride):
+        strides = [stride] + [1]*(num_Blocks-1)
+        layers = []
+        for stride in reversed(strides):
+            layers += [BasicBlockDec(self.in_planes, stride)]
+        self.in_planes = planes
+        return nn.Sequential(*layers)
+
+    def forward(self, x):
+
+        # ipdb.set_trace()
+        x = x.squeeze(2)
+
+        if self.params['add_gaussian_noise_to_gen']:
+            x = self.gaussianNoise(x)
+
+        if self.is_probalistic:
+            
+            noise_matrix_w_h = self.params['nz']
+            noise = t.randn( self.params['generator_in_seq_len'], 1, noise_matrix_w_h).to(x.device) 
+            
+            x_concat = t.zeros((x.shape[0], x.shape[1], x.shape[2]+ 1, x.shape[3]+ noise_matrix_w_h)).to(x.device) 
+            x_concat[:,:,:x.shape[2], :x.shape[3]] = x
+            x_concat[:,:,x.shape[2]:, x.shape[3]:] = noise
+            # x = x_concat
+            x = x_concat
+
+            # ipdb.set_trace()        
+        x = F.elu(self.bn1(self.conv1(x)))
+        # ipdb.set_trace()
+
+        x = self.encoder(x)
+        
+        x = self.decoder(x)
+        x = nn.Sigmoid()(self.finalLayer(x))
+        if self.is_probalistic:
+            x  = torchvision.transforms.functional.center_crop(x, (self.params['imsize'], self.params['imsize']))
+        
+        return x.unsqueeze(2)
+    
+        
 class ResNet18Enc(nn.Module):
 
     def __init__(self, num_Blocks=[2,2,2,2], z_dim=10, nc=3):
@@ -146,7 +240,7 @@ class ResNet18Dec(nn.Module):
 
 class VAE(nn.Module):
 
-    def __init__(self, params, z_dim=40):
+    def __init__(self, params, z_dim=1024):
         super().__init__()
         self.encoder = ResNet18Enc(z_dim=z_dim, nc=6)
         self.decoder = ResNet18Dec(z_dim=z_dim, nc=6)
@@ -250,7 +344,7 @@ act_fn_by_name = {
 
 class ResNetFrameDiscriminator(nn.Module):
 
-    def __init__(self, params, num_blocks=[3,3,3], c_hidden=[16,32,64], act_fn_name="relu", block_name="ResNetBlock", **kwargs):
+    def __init__(self, params, num_blocks=[3,3,3], c_hidden=[32, 64, 128], act_fn_name="relu", block_name="ResNetBlock", outputblock="avgpool_plus_dense", **kwargs):
         """
         Inputs:
             num_classes - Number of classification outputs (10 for CIFAR10)
@@ -261,6 +355,8 @@ class ResNetFrameDiscriminator(nn.Module):
         """
         super().__init__()
         self.params = params
+        self.outputblock = outputblock
+
         assert block_name in resnet_blocks_by_name
         self.hparams = SimpleNamespace(
                                        c_hidden=c_hidden,
@@ -277,11 +373,11 @@ class ResNetFrameDiscriminator(nn.Module):
         # A first convolution on the original image to scale up the channel size
         if self.hparams.block_class == PreActResNetBlock: # => Don't apply non-linearity on output
             self.input_net = nn.Sequential(
-                nn.Conv2d(self.params['nc'], c_hidden[0], kernel_size=3, padding=1, bias=False)
+                nn.Conv2d(self.params['out_seq_len'], c_hidden[0], kernel_size=3, padding=1, bias=False)
             )
         else:
             self.input_net = nn.Sequential(
-                nn.Conv2d(self.params['nc'], c_hidden[0], kernel_size=3, padding=1, bias=False),
+                nn.Conv2d(self.params['out_seq_len'], c_hidden[0], kernel_size=3, padding=1, bias=False),
                 nn.BatchNorm2d(c_hidden[0]),
                 self.hparams.act_fn()
             )
@@ -300,12 +396,16 @@ class ResNetFrameDiscriminator(nn.Module):
         self.blocks = nn.Sequential(*blocks)
 
         # Mapping to classification output
-        self.output_net = nn.Sequential(
+        if self.outputblock == "avgpool_plus_dense":
+
+            self.output_net = AVGPoolConcatDenseLayer(self.params, c_hidden[-1], 16, 64)
+        else:
+            self.output_net = nn.Sequential(
             nn.AdaptiveAvgPool2d((1,1)),
             nn.Flatten(),
             nn.Linear(c_hidden[-1], 1),
             nn.Sigmoid()
-        )
+            )
 
     def _init_params(self):
         # Based on our discussion in Tutorial 4, we should initialize the convolutions according to the activation function
@@ -319,8 +419,13 @@ class ResNetFrameDiscriminator(nn.Module):
 
     def forward(self, x):
 
+        # ipdb.set_trace()
+
+        # x = t.view
+        x = x.squeeze(2)
+
         # noise_matrix_w_h = 12
-        # noise = t.randn( self.params['nc'] , noise_matrix_w_h, noise_matrix_w_h)
+        # noise = t.randn( self.params['generator_in_seq_len'] , noise_matrix_w_h, noise_matrix_w_h)
         
         # x_concat = t.zeros((x.shape[0], x.shape[1], x.shape[2]+ noise_matrix_w_h, x.shape[3]+ noise_matrix_w_h))
         # x_concat[:,:,:x.shape[2], :x.shape[3]] = x
@@ -328,12 +433,14 @@ class ResNetFrameDiscriminator(nn.Module):
 
         x = self.input_net(x)
         x = self.blocks(x)
+        # ipdb.set_trace()
+
         x = self.output_net(x)
-        return x.squeeze()
+        return x.squeeze(1)
 
 class ResNetTemproalDiscriminator(nn.Module):
 
-    def __init__(self, params, num_blocks=[3,3,3], c_hidden=[16,32,64], act_fn_name="relu", block_name="ResNetBlock", **kwargs):
+    def __init__(self, params, num_blocks=[3,3,3], c_hidden=[32,64,128], act_fn_name="relu", block_name="ResNetBlock", **kwargs):
         """
         Inputs:
             num_classes - Number of classification outputs (10 for CIFAR10)
@@ -361,11 +468,11 @@ class ResNetTemproalDiscriminator(nn.Module):
         # A first convolution on the original image to scale up the channel size
         if self.hparams.block_class == PreActResNetBlock: # => Don't apply non-linearity on output
             self.input_net = nn.Sequential(
-                nn.Conv2d(self.params['nc']*2, c_hidden[0], kernel_size=3, padding=1, bias=False)
+                nn.Conv2d(self.params['out_seq_len']+ self.params['in_seq_len'], c_hidden[0], kernel_size=3, padding=1, bias=False)
             )
         else:
             self.input_net = nn.Sequential(
-                nn.Conv2d(self.params['nc']*2, c_hidden[0], kernel_size=3, padding=1, bias=False),
+                nn.Conv2d(self.params['out_seq_len'] + self.params['in_seq_len'], c_hidden[0], kernel_size=3, padding=1, bias=False),
                 nn.BatchNorm2d(c_hidden[0]),
                 self.hparams.act_fn()
             )
@@ -383,13 +490,16 @@ class ResNetTemproalDiscriminator(nn.Module):
                 )
         self.blocks = nn.Sequential(*blocks)
 
-        # Mapping to classification output
-        self.output_net = nn.Sequential(
-            nn.AdaptiveAvgPool2d((1,1)),
-            nn.Flatten(),
-            nn.Linear(c_hidden[-1], 1),
-            nn.Sigmoid()
-        )
+        self.output_net = AVGPoolConcatDenseLayer(self.params, c_hidden[-1], 16, 128, 3)
+
+        # # Mapping to classification output
+        # self.output_net = nn.Sequential(
+        #     nn.AdaptiveAvgPool2d((1,1)),
+        #     nn.Flatten(),
+        #     nn.Linear(c_hidden[-1], 1),
+        #     nn.PReLU(),
+        #     nn.Sigmoid()
+        # )
 
     def _init_params(self):
         # Based on our discussion in Tutorial 4, we should initialize the convolutions according to the activation function
@@ -403,13 +513,15 @@ class ResNetTemproalDiscriminator(nn.Module):
 
     def forward(self, x):
 
+        x = x.squeeze(2)
+
         # noise_matrix_w_h = 12
-        # noise = t.randn( self.params['nc'] * 2, noise_matrix_w_h, noise_matrix_w_h)
+        # noise = t.randn( self.params['generator_in_seq_len'] * 2, noise_matrix_w_h, noise_matrix_w_h)
         
         # x_concat = t.zeros((x.shape[0], x.shape[1], x.shape[2]+ noise_matrix_w_h, x.shape[3]+ noise_matrix_w_h))
         # x_concat[:,:,:x.shape[2], :x.shape[3]] = x
         # x_concat[:,:,x.shape[2]:, x.shape[3]:] = noise
-
+        # ipdb.set_trace()
         x = self.input_net(x)
         x = self.blocks(x)
         x = self.output_net(x)

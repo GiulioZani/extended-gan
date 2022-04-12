@@ -96,12 +96,28 @@ class IncrementalAccuracy:
 def visualize_predictions(x, y, preds, epoch=1, path="", show_plot=False):
     if path != "" and not os.path.exists(path):
         os.mkdir(path)
-    to_plot = [x[0], y[0].squeeze(1), preds[0]]
+    # ipdb.set_trace()
+    # x= x.permute(0, 1,3,4,2 )
+    # y = y
+    # preds = preds.permute(0,1,3,4,2)
+
+    x_shape = x.shape
+    y_shape = y.shape
+    to_plot = [x[0][ x_shape[1] - y_shape[1]:,...], y[0], preds[0]]
+    # ipdb.set_trace()
     _, ax = plt.subplots(nrows=len(to_plot), ncols=to_plot[0].shape[0])
     plt.suptitle(f"Epoch {epoch}")
     for i, row in enumerate(ax):
         for j, col in enumerate(row):
-            uba = to_plot[i].cpu().detach().numpy()[j]
+            # ipdb.set_trace()
+            
+            uba =  to_plot[i].cpu().detach().numpy()[j]
+            # ipdb.set_trace()
+            shape = uba.shape
+            if len(shape) == 3:
+                uba = np.reshape(uba, (shape[1], shape[2], shape[0]))
+
+        
             col.imshow(uba)
 
     row_labels = ["input", "GT", "pred"]
@@ -159,3 +175,8 @@ def denormalize(x, mean, var):
     mean = t.mean(mean)
     var = t.var(var)
     return x * var + mean
+
+
+def get_number_of_params(model):
+    pytorch_total_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    return pytorch_total_params

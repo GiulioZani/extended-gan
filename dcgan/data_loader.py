@@ -3,7 +3,6 @@ import torch as t
 import ipdb
 import matplotlib.pyplot as plt
 from tqdm import tqdm
-import h5py
 
 
 class DataLoader:
@@ -16,7 +15,7 @@ class DataLoader:
         crop=64,
         shuffle: bool = True,
         in_seq_len: int = 4,
-        out_seq_len: int = 4,
+        out_seq_len: int = 4
     ):
         self.in_seq_len = in_seq_len
         self.out_seq_len = out_seq_len
@@ -41,10 +40,7 @@ class DataLoader:
     def __read_next_file(self) -> t.Tensor:
         if self.file_index == len(self.files):
             raise StopIteration
-        # reads the next file in h5 format
-        with h5py.File(self.files[self.file_index], "r") as f:
-            data = t.from_numpy(f["default"][:])
-        # data = t.load(self.files[self.file_index])
+        data = t.load(self.files[self.file_index])
         self.file_index += 1
         result = self.__segmentify(data)
         return result
@@ -53,26 +49,33 @@ class DataLoader:
         data = data[: (len(data) // self.tot_seq_len) * self.tot_seq_len]
         if self.crop is not None:
             data = data[:, :, : self.crop, : self.crop]
-        return data
+        return data 
 
     def __next__(self) -> tuple[t.Tensor, t.Tensor]:
         if self.remainder.shape[0] == 0:
             data = self.__read_next_file()
         else:
             data = self.remainder
-        self.remainder = data[self.batch_size :]
-        segments = tuple(
-            data[i : i + self.tot_seq_len]
-            for i in range(self.batch_size)
-            if len(data[i : i + self.tot_seq_len]) == self.tot_seq_len
-        )
-        if len(segments) == 0:
+        self.remainder = data[self.batch_size:]
+        try:
+            result = t.stack(tuple(data[i:i+self.tot_seq_len] for i in range(self.batch_size)))
+        except:
             raise StopIteration
-        result = t.stack(segments, dim=0)
+        result = t.stack(tuple(data[i:i+self.tot_seq_len] for i in range(self.batch_size)))
         if len(result) == 0:
             raise StopIteration
-        xs = t.stack(tuple(s[: self.in_seq_len] for s in result))
-        ys = t.stack(tuple(s[self.in_seq_len :] for s in result))
+        xs = t.stack(
+            tuple(
+                s[: self.in_seq_len]
+                for s in result
+            )
+        )
+        ys = t.stack(
+            tuple(
+                s[self.in_seq_len:]
+                for s in result
+            )
+        )
         rand_indices = (
             t.randperm(result.shape[0])
             if self.shuffle
@@ -96,7 +99,7 @@ def get_loaders(
     *,
     crop: int = 64,
     in_seq_len: int = 12,
-    out_seq_len: int = 6,
+    out_seq_len: int = 6
 ) -> tuple[DataLoader, DataLoader]:
     test_folder = os.path.join(data_location, "test")
     train_folder = os.path.join(data_location, "train")
@@ -122,20 +125,20 @@ def get_loaders(
 
 def test():
     train_dl, test_dl = get_loaders(
-        "/mnt/tmp/multi_channel_train_test",
+        "/home/al/Project/extended-gan/datasets/multichannel",
         32,
         64,
         t.device("cuda" if t.cuda.is_available() else "cpu"),
         in_seq_len=8,
-        out_seq_len=4,
+        out_seq_len=4
     )
     for i, (x, y) in enumerate(tqdm(train_dl)):
+        # ipdb.set_trace()
         # plt.imshow(x[0, 0, 0].cpu())
         # plt.show()
         # print(x.shape)
         # return
-        # print(f"iteration: {i}")
-        pass
+        print(f"iteration: {i}")
 
 
 if __name__ == "__main__":

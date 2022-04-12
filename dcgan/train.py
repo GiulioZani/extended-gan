@@ -1,4 +1,7 @@
 import imp
+import math
+from platform import architecture
+from unittest import result
 import torch as t
 import torch.nn as nn
 import torch.optim as optim
@@ -9,29 +12,46 @@ import random
 import os
 import ipdb
 import json
-from .model import (
-    weights_init,
-    ProbablisticConvGenerator as Generator,
 
+
+from .metrics import MetricsManager, IncrementalTuple
+
+
+from .conv2dmodel import (
     FrameDiscriminator,
+    TemporalDiscriminator,
+    weights_init,
+    # ProbablisticConvGenerator as Generator,
+
+    # FrameDiscriminator,
     # TemporalDiscriminator
 )
 from .resnetmodel import (
-    VAE as VAEGenerator,
-    # ResNetTemproalDiscriminator as TemporalDiscriminator,
-    # ResNetFrameDiscriminator as FrameDiscriminator
+    ResNetAutoEncoder as Generator,
+    VAE as AAGenerator,
+    ResNetTemproalDiscriminator ,
+    ResNetFrameDiscriminator 
     )
     
-from .convmodel import (
-    
-    # EncoderDecoderConvLSTM as Generator,
-    ConvLSTMTemporalDiscriminator as TemporalDiscriminator,
+from .lstmconvmodel import (
+    EncoderDecoderConvLSTM as LSTMGenerator,
+    ConvLSTMTemporalDiscriminator as LSTMTemporalDiscriminator,
     )
 
+from .conv3dmodel import(
+    Conv3DFrameDiscriminator,
+    Conv3DTemporalDiscriminator,
+    ConvGenerator
+)
 
+from .resnet3d import (
+    ResNet3DClassifier as ResNet3DFrameDiscriminator,
+    ResNet3DAutoEncoder
+)
 
 from .data_loader import get_loaders, DataLoader
 from .utils import (
+    get_number_of_params,
     visualize_predictions,
     IncrementalAccuracy,
     accuracy_criterion,
@@ -39,8 +59,22 @@ from .utils import (
 )
 
 
-val_mse_validation_data = 10
+architecture_params = {
+    "netG" :   ConvGenerator,
+    "netFD" : Conv3DFrameDiscriminator,
+    "netTD" : Conv3DTemporalDiscriminator
+}
 
+
+Generator = architecture_params['netG']
+FrameDiscriminator = architecture_params['netFD']
+TemporalDiscriminator = architecture_params['netTD']
+
+
+# def gen_loss(fd_labels, td_labels):
+#     loss =   (t.sum(t.log( t.ones_like(fd_labels) - fd_labels ) )) +  (t.sum(t.log(t.ones_like(td_labels) - td_labels)))
+
+#     return loss #/ fd_labels.size(0)
 def test(
     dataloader: DataLoader,
     netG: Generator,
@@ -48,6 +82,7 @@ def test(
     netTD: TemporalDiscriminator,
     device: t.device,
     epoch: int,
+    params
 ):
     img_path = os.path.join(os.path.dirname(__file__), "imgs")
 
@@ -90,6 +125,13 @@ def test(
             pred_fake_temp_label = netTD(
                 t.cat((x, pred_y), dim=1)
             )
+ 
+            # fd_metrics.update(pred_fake_frame_label, fake_label)
+            # td_metrics.update(pred_fake_temp_label, fake_label)
+
+            acc_FD_real = accuracy_criterion(pred_real_frame_label, real_label)
+            acc_TD_real = accuracy_criterion(pred_real_temp_label, real_label)
+
             acc_FD_fake = accuracy_criterion(pred_fake_frame_label, fake_label)
             acc_TD_fake = accuracy_criterion(pred_fake_temp_label, fake_label)
 
@@ -122,7 +164,7 @@ def test(
     netTD.train()
     netFD.train()
     global val_mse_validation_data
-    val_mse_validation_data = running_mse.item()
+    # val_mse_validation_data = running_mse.item()
     return {
         "Temp. Disc. Accuracy": inc_acc_TD.item(),
         "Frame Dis. Accuracy": inc_acc_FD.item(),
@@ -134,8 +176,6 @@ def test(
     }
 
 
-noise = 0.001
-noise_step = 0.005
 
 def train_single_epoch(
     *,
@@ -149,30 +189,52 @@ def train_single_epoch(
     criterion,
     device: t.device,
     epoch: int,
+    params: dict,
 ):
+    td_metrics = MetricsManager(("precision",), prefix="temp_disc")
     inc_acc_FD = IncrementalAccuracy()
     inc_acc_TD = IncrementalAccuracy()
     inc_acc_G = IncrementalAccuracy()
-    inc_acc_G_MSE = IncrementalAccuracy()
+    running_mse = IncrementalAccuracy()
+    pred_metrics = MetricsManager(("mse",), prefix="train")
+    fd_metrics = MetricsManager(("precision",), prefix="frame_disc")
 
+    img_path = os.path.join(os.path.dirname(__file__), "validation")
     noise_epoch_added = 0
 
     for i, (x, y) in enumerate(dataloader):
-        y = y.squeeze(2)
-        data = x.squeeze(2)
+        # ipdb.set_trace()
+        # ipdb.set_trace()
+
+#       crop the channels that we dont use
+        y = y[:,:,:params['nc'],...]
+        x = x[:,:,:params['nc'],...]
+
+
+        # y = y.squeeze(2)
+        # x = x.squeeze(2)
+
+
+        # Saving the original past data
+        data_original = x
+        
+        # 
+        data = x[:,params['in_seq_len']-params['generator_in_seq_len']:,...]
         # Get batch size. Can be different from params['nbsize'] for last batch in epoch.
         b_size = data.size(0)
         # ipdb.set_trace()
 
+        
         # Make accumalated gradients of the discriminator zero.
         netTD.zero_grad()
         netFD.zero_grad()
         # Create labels for the real data. (label=1)
-        real_label = t.zeros(b_size, device=device) + 1
+        real_label = t.ones(b_size, device=device)  
         fake_label = t.zeros(b_size, device=device)
-
+        # ipdb.set_trace()
         pred_real_frame_label = netFD(y)
-        pred_real_temp_label = netTD(t.cat((data, y), dim=1))
+        # ipdb.set_trace()
+        pred_real_temp_label = netTD(t.cat((data_original, y), dim=1))
         # ipdb.set_trace()
 
         errFD_real = criterion(pred_real_frame_label, real_label)
@@ -202,16 +264,20 @@ def train_single_epoch(
         # and the generator are slightly different.
         fake_data_detached = fake_data.detach()
         pred_fake_frame_label = netFD(fake_data_detached)
-        pred_fake_temp_label = netTD(t.cat((data, fake_data_detached), dim=1))
+        pred_fake_temp_label = netTD(t.cat((data_original, fake_data_detached), dim=1))
         errFD_fake = criterion(pred_fake_frame_label, fake_label)
         errTD_fake = criterion(pred_fake_temp_label, fake_label)
         inc_acc_FD += accuracy_criterion(pred_fake_frame_label, fake_label)
         inc_acc_TD += accuracy_criterion(pred_fake_temp_label, fake_label)
 
+        pred_metrics.update(y, fake_data)
+
         # Calculate gradients for backpropagation.
         errFD_fake.backward()
         errTD_fake.backward()
         # D_G_z1 = output.mean().item()
+
+
 
         # Net discriminator loss.
         errFD = errFD_real + errFD_fake
@@ -220,6 +286,23 @@ def train_single_epoch(
         optimizerFD.step()
         optimizerTD.step()
 
+
+        diff_square = (fake_data.flatten() - y.flatten()) ** 2
+        running_mse += IncrementalAccuracy(
+            t.tensor(
+                    [diff_square.sum(), diff_square.numel()], dtype=t.float
+                )
+            )
+        real_loss_G = nn.MSELoss()(fake_data, y) 
+
+
+        fd_metrics.update(pred_real_frame_label, real_label)
+        fd_metrics.update(pred_fake_frame_label, fake_label)
+        td_metrics.update(pred_real_temp_label, real_label)
+        td_metrics.update(pred_fake_temp_label, fake_label)
+
+
+
         # Make accumalted gradients of the generator zero.
         netG.zero_grad()
         # We want the fake data to be classified as real. Hence
@@ -227,11 +310,16 @@ def train_single_epoch(
         # No detach() is used here as we want to calculate the gradients w.r.t.
         # the generator this time.
         pred_frame_label = netFD(fake_data).view(-1)
-        pred_temp_label = netTD(t.cat((data, fake_data), dim=1)).view(-1)
-        errG = criterion(pred_frame_label, real_label) + criterion(
-            pred_temp_label, real_label
-        ) 
-        inc_acc_G += inc_acc_FD.reciprocal() + inc_acc_TD.reciprocal() #+ inc_acc_G_MSE
+        pred_temp_label = netTD(t.cat((data_original, fake_data), dim=1)).view(-1)
+
+        # ipdb.set_trace()
+        errG =  criterion(pred_temp_label, real_label) + criterion(pred_frame_label, real_label) #+  criterion(fake_data, y) 
+        # if we have nash equilibrium, we don't want to add random guess to the loss
+        # ipdb.set_trace()
+        inc_acc_G +=   inc_acc_FD.reciprocal() \
+             +  inc_acc_TD.reciprocal() #+ inc_acc_G_MSE
+
+
         # Gradients for backpropagation are calculated.
         # Gradients w.r.t. both the generator and the discriminator
         # parameters are calculated, however, the generator's optimizer
@@ -243,7 +331,8 @@ def train_single_epoch(
         # Update generator parameters.
         optimizerG.step()
 
-        real_loss_G = nn.MSELoss()(fake_data, y) 
+
+        
         # inc_acc_G_MSE += accuracy_criterion(fake_data, y)
 
         # if real_loss_G.item() < 0.005:
@@ -252,13 +341,18 @@ def train_single_epoch(
 
         # Check progress of training.
         if i % 50 == 0:
+            
+            fake_data = netG(data).cpu()
+            visualize_predictions(data, y, fake_data, epoch, img_path)
             print(
                 # f"[{epoch}/{params['nepochs']}]\t"
                 f"Loss_FD: {errFD.item():.4f}\t"
                 + f"Loss_TD: {errTD.item():.4f}\t"
                 + f"Loss_G: {errG.item():.4f}\t"
-                + f"Loss_G_MSE: {real_loss_G.item():.4f}\t"
+                + f"Loss_G_MSE: {real_loss_G.item():.8f}\t"
+                # + f"Loss_G_MSE: {real_loss_G.item():.4f}\t"
 
+                # + f"Loss_G_MSE: {real_loss_G.item():.4f}\t"
                 # + f"Loss_G_ICN_MSE: {inc_acc_G_MSE.item():.4f}\t"
                 # + f"D(x): {D_x:.4f}\tD(G(z)): {D_G_z1:.14f} / {D_G_z2:.4f}"
             )
@@ -279,24 +373,36 @@ def train():
 
     # Parameters to define the model.
     params = {
-        "bsize": 32,  # Batch size during training.
-        "imsize": 64,  # Spatial size of training images. All images will be resized to this size during preprocessing.
-        "nc": 6,  # Number of sequences to predic
-        "nz": 64,  # Size of the Z latent vector (the input to the generator).
+        "bsize": 8,  # Batch size during training.
+        "imsize": 32,  # Spatial size of training images. All images will be resized to this size during preprocessing.
+        "nc": 1,  # Number of channels
+        "nz": 32,  # Size of the Z latent matrix (imsize * z)
         "ngf": 64,  # Size of feature maps in the generator. The depth will be multiples of this.
-        "ndf": 32,  # Size of features maps in the discriminator. The depth will be multiples of this.
+        "ndf": 2,  # Size of features maps in the discriminator. The depth will be multiples of this.
         "nepochs": 10,  # Number of training epochs.
         "lr": 0.0002,  # Learning rate for optimizers
         "beta1": 0.5,  # Beta1 hyperparam for Adam optimizer
         "save_epoch": 2,
+        "probalistic_gen": False,
+        'in_seq_len': 8,
+        'out_seq_len': 8,
+        'generator_in_seq_len': 8, # should be less than in_seq_len
+        'add_gaussian_noise_to_gen': True,
+        'gaussian_noise_std': 0.0005, # std of gaussian noise added to the generator
+        'debug': False
     }
+    
 
     # Use GPU is available else use CPU.
     device = t.device("cuda" if t.cuda.is_available() else "cpu")
+    if params['debug']:
+        device = t.device('cpu')
     print(device, " will be used.\n")
 
     # Create the generator.
     netG = Generator(params).to(device)
+    # netG.load_state_dict(t.load(os.path.join(curdir, 'models/netG.pth'), map_location=device))
+
     # Apply the weights_init() function to randomly initialize all
     # weights to mean=0.0, stddev=0.2
     netG.apply(weights_init)
@@ -313,6 +419,22 @@ def train():
     # Print the model.
     print(netTD)
     print(netFD)
+
+    # netTD.load_state_dict(t.load(os.path.join(curdir, 'models/netTD_epoch_10.pth'), map_location=device))
+    # netFD.load_state_dict(t.load(os.path.join(curdir, 'models/netFD_epoch_10.pth'), map_location=device))
+    # netG.load_state_dict(t.load(os.path.join(curdir, 'models/netG_epoch_2.pth'), map_location=device))
+
+    params_dict = {
+        "netG": get_number_of_params(netG),
+        "netTD": get_number_of_params(netTD),
+        "netFD": get_number_of_params(netFD),
+    }
+    print(params_dict)
+
+    # netLTD = ConvTemporalDiscriminator(params).to(device)
+
+    # netLTD.apply(weights_init)
+    # print(netLTD)
 
     # Binary Cross Entropy loss function.
     criterion = nn.BCELoss()
@@ -333,8 +455,9 @@ def train():
     for epoch in range(1, params["nepochs"] + 1):
 
         train_data_loader, test_data_loader = get_loaders(
-            "./datasets/data", 32, 64, device, seq_len=params["nc"]
+            "./datasets/data", params['bsize'], params['bsize'],  device, crop= params['imsize'], in_seq_len=params["in_seq_len"], out_seq_len=params['out_seq_len']
         )
+
         train_result = train_single_epoch(
             dataloader=train_data_loader,
             netG=netG,
@@ -346,9 +469,18 @@ def train():
             criterion=criterion,
             device=device,
             epoch=epoch,
+            params=params,
         )
-        test_result = test(test_data_loader, netG, netFD, netTD, device, epoch)
+        test_result = test(test_data_loader, netG, netFD, netTD, device, epoch, params)
         results = train_result | test_result
         print(json.dumps(results, indent=4))
         history.append(results)
+        t.save(netG.state_dict(), os.path.join(curdir, "models", "netG_epoch_" + str(epoch) + ".pth"))
+        t.save(netFD.state_dict(), os.path.join(curdir, "models", "netFD_epoch_" + str(epoch) + ".pth"))
+        t.save(netTD.state_dict(), os.path.join(curdir, "models", "netTD_epoch_" + str(epoch) + ".pth"))
+
     history.plot()
+
+    t.save(netG.state_dict(), os.path.join(curdir, "models", "netG.pth"))
+    t.save(netFD.state_dict(), os.path.join(curdir, "models", "netFD.pth"))
+    t.save(netTD.state_dict(), os.path.join(curdir, "models", "netTD.pth"))
