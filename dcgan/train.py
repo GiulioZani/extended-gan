@@ -58,54 +58,79 @@ def test(
     inc_acc_FD = IncrementalAccuracy()
     inc_acc_TD = IncrementalAccuracy()
     inc_acc_G = IncrementalAccuracy()
-    running_mse = IncrementalAccuracy()
+    total_length = 0
+    threshold = 0.5
+    total_tp = 0
+    total_fp = 0
+    total_tn = 0
+    total_fn = 0
+    loss_model = 0.0
+    denorm_loss_model = 0.0
+
     with t.no_grad():
-        for i, (data, y) in enumerate(dataloader):
+        for i, (x, y) in enumerate(dataloader):
             y = y.squeeze(2)
-            data = data.squeeze(2)
-            real_data = data
+            x = x.squeeze(2)
+            real_data = x
             b_size = real_data.size(0)
             real_label = t.zeros(b_size, device=device) + 1
             fake_label = t.zeros(b_size, device=device)
 
             if i == 0:
-                fake_data = netG(data).cpu()
-                visualize_predictions(data, y, fake_data, epoch, img_path)
+                pred_y = netG(x).cpu()
+                visualize_predictions(x, y, pred_y, epoch, img_path)
 
             pred_real_frame_label = netFD(y)
-            pred_real_temp_label = netTD(t.cat((data, y), dim=1))
+            pred_real_temp_label = netTD(t.cat((x, y), dim=1))
             acc_FD_real = accuracy_criterion(pred_real_frame_label, real_label)
             acc_TD_real = accuracy_criterion(pred_real_temp_label, real_label)
 
-            fake_data = netG(data)
-            diff_square = (fake_data.flatten() - y.flatten()) ** 2
-            running_mse += IncrementalAccuracy(
-                t.tensor(
-                    [diff_square.sum(), diff_square.numel()], dtype=t.float
-                )
-            )
-            fake_data_detached = fake_data.detach()
-            pred_fake_frame_label = netFD(fake_data_detached)
+            pred_y = netG(x).detach()
+            pred_fake_frame_label = netFD(pred_y)
             pred_fake_temp_label = netTD(
-                t.cat((data, fake_data_detached), dim=1)
+                t.cat((x, pred_y), dim=1)
             )
             acc_FD_fake = accuracy_criterion(pred_fake_frame_label, fake_label)
             acc_TD_fake = accuracy_criterion(pred_fake_temp_label, fake_label)
 
             inc_acc_FD += acc_FD_real + acc_FD_fake
             inc_acc_TD += acc_TD_real + acc_TD_fake
-
             inc_acc_G += inc_acc_FD.reciprocal() + inc_acc_TD.reciprocal()
+            loss_model += t.nn.functional.mse_loss(
+                pred_y.squeeze(), y.squeeze(), reduction="sum"
+            )
+            y_true_mask = y > threshold
+            y_pred_mask = pred_y > threshold
+            tn, fp, fn, tp = t.bincount(
+                y_true_mask.flatten() * 2 + y_pred_mask.flatten(),
+                minlength=4,
+            )
+            total_tp += tp
+            total_fp += fp
+            total_tn += tn
+            total_fn += fn
+            total_length += y.numel()
+    precision = total_tp / (total_tp + total_fp)
+    recall = total_tp / (total_tp + total_fn)
+    accuracy = (total_tp + total_tn) / (
+        total_tp + total_tn + total_fp + total_fn
+    )
+    f1 = 2 * precision * recall / (precision + recall)
+    loss_model /= total_length
+
     netG.train()
     netTD.train()
     netFD.train()
     global val_mse_validation_data
     val_mse_validation_data = running_mse.item()
     return {
-        "val_acc_temp_disc": inc_acc_TD.item(),
-        "val_acc_frame_disc": inc_acc_FD.item(),
-        "val_mse": running_mse.item()
-        # "val_acc_gen": inc_acc_G.item(),
+        "Temp. Disc. Accuracy": inc_acc_TD.item(),
+        "Frame Dis. Accuracy": inc_acc_FD.item(),
+        "MSE": loss_model,
+        "Precision": precision,
+        "Recall": recall,
+        "Accuracy": accuracy,
+        "f1": f1,
     }
 
 
