@@ -100,7 +100,6 @@ def test(
     total_fn = 0
     denorm_denom = 0.0
     loss_model = 0.0
-    denorm_loss_model = 0.0
 
     with t.no_grad():
         for i, (x, y) in enumerate(dataloader):
@@ -113,7 +112,7 @@ def test(
                 :, params["in_seq_len"] - params["generator_in_seq_len"] :, ...
             ]
 
-            y = t.sum(y.flatten() ** 2)
+            denorm_denom += t.sum(y.flatten() ** 2)
             b_size = x.size(0)
             real_label = t.zeros(b_size, 1, device=device) + 1
             fake_label = t.zeros(b_size, 1, device=device)
@@ -181,6 +180,7 @@ def test(
         "f1": float(f1),
     }
 
+
 curdir = os.path.dirname(__file__)
 
 
@@ -229,15 +229,15 @@ def train_single_epoch(
         ]
         # Get batch size. Can be different from params['nbsize'] for last batch in epoch.
         b_size = data_original.size(0)
-       
+
         # ipdb.set_trace()
 
         # Make accumalated gradients of the discriminator zero.
         netTD.zero_grad()
         netFD.zero_grad()
         # Create labels for the real data. (label=1)
-        real_label = t.zeros(b_size,1, device=device) +1 
-        fake_label = t.zeros(b_size,1, device=device)
+        real_label = t.zeros(b_size, 1, device=device) + 1
+        fake_label = t.zeros(b_size, 1, device=device)
         # ipdb.set_trace()
         pred_real_frame_label = netFD(y)
         # ipdb.set_trace()
@@ -315,9 +315,10 @@ def train_single_epoch(
 
         # ipdb.set_trace()
 
-        
-        errG =  criterion(pred_temp_label, real_label) + criterion(pred_frame_label, real_label) #+  criterion(fake_data, y) 
-   
+        errG = criterion(pred_temp_label, real_label) + criterion(
+            pred_frame_label, real_label
+        )  # +  criterion(fake_data, y)
+
         # if we have nash equilibrium, we don't want to add random guess to the loss
         # ipdb.set_trace()
         inc_acc_G += (
@@ -344,10 +345,25 @@ def train_single_epoch(
         # Check progress of training.
         if i % 50 == 0:
 
-            t.save(netG.state_dict(), os.path.join(curdir, "models", "netG_epoch_" + str(epoch) + ".pth"))
-            t.save(netFD.state_dict(), os.path.join(curdir, "models", "netFD_epoch_" + str(epoch) + ".pth"))
-            t.save(netTD.state_dict(), os.path.join(curdir, "models", "netTD_epoch_" + str(epoch) + ".pth"))
-            
+            t.save(
+                netG.state_dict(),
+                os.path.join(
+                    curdir, "models", "netG_epoch_" + str(epoch) + ".pth"
+                ),
+            )
+            t.save(
+                netFD.state_dict(),
+                os.path.join(
+                    curdir, "models", "netFD_epoch_" + str(epoch) + ".pth"
+                ),
+            )
+            t.save(
+                netTD.state_dict(),
+                os.path.join(
+                    curdir, "models", "netTD_epoch_" + str(epoch) + ".pth"
+                ),
+            )
+
             fake_data = netG(data).cpu()
             visualize_predictions(data, y, fake_data, epoch, img_path)
             print(
@@ -424,9 +440,24 @@ def train():
     print(netTD)
     print(netFD)
 
-    netTD.load_state_dict(t.load(os.path.join(curdir, 'models/netTD_epoch_1.pth'), map_location=device))
-    netFD.load_state_dict(t.load(os.path.join(curdir, 'models/netFD_epoch_1.pth'), map_location=device))
-    netG.load_state_dict(t.load(os.path.join(curdir, 'models/netG_epoch_1.pth'), map_location=device))
+    netTD.load_state_dict(
+        t.load(
+            os.path.join(curdir, "models/netTD_epoch_1.pth"),
+            map_location=device,
+        )
+    )
+    netFD.load_state_dict(
+        t.load(
+            os.path.join(curdir, "models/netFD_epoch_1.pth"),
+            map_location=device,
+        )
+    )
+    netG.load_state_dict(
+        t.load(
+            os.path.join(curdir, "models/netG_epoch_1.pth"),
+            map_location=device,
+        )
+    )
 
     params_dict = {
         "netG": get_number_of_params(netG),
