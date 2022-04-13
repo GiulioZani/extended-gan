@@ -115,8 +115,8 @@ def test(
 
             y = t.sum(y.flatten() ** 2)
             b_size = x.size(0)
-            real_label = t.zeros(b_size, device=device) + 1
-            fake_label = t.zeros(b_size, device=device)
+            real_label = t.zeros(b_size, 1, device=device) + 1
+            fake_label = t.zeros(b_size, 1, device=device)
 
             if i == 0:
                 pred_y = netG(x).cpu()
@@ -124,6 +124,7 @@ def test(
 
             pred_real_frame_label = netFD(y)
             pred_real_temp_label = netTD(t.cat((x, y), dim=1))
+
             acc_FD_real = accuracy_criterion(pred_real_frame_label, real_label)
             acc_TD_real = accuracy_criterion(pred_real_temp_label, real_label)
 
@@ -168,7 +169,6 @@ def test(
     netG.train()
     netTD.train()
     netFD.train()
-    global val_mse_validation_data
     # val_mse_validation_data = running_mse.item()
     return {
         "Temp. Disc. Accuracy": inc_acc_TD.item(),
@@ -180,6 +180,8 @@ def test(
         "NMSE": nmse.item(),
         "f1": float(f1),
     }
+
+curdir = os.path.dirname(__file__)
 
 
 def train_single_epoch(
@@ -226,15 +228,16 @@ def train_single_epoch(
             :, params["in_seq_len"] - params["generator_in_seq_len"] :, ...
         ]
         # Get batch size. Can be different from params['nbsize'] for last batch in epoch.
-        b_size = data.size(0)
+        b_size = data_original.size(0)
+       
         # ipdb.set_trace()
 
         # Make accumalated gradients of the discriminator zero.
         netTD.zero_grad()
         netFD.zero_grad()
         # Create labels for the real data. (label=1)
-        real_label = t.ones(b_size, device=device)
-        fake_label = t.zeros(b_size, device=device)
+        real_label = t.zeros(b_size,1, device=device) +1 
+        fake_label = t.zeros(b_size,1, device=device)
         # ipdb.set_trace()
         pred_real_frame_label = netFD(y)
         # ipdb.set_trace()
@@ -307,15 +310,14 @@ def train_single_epoch(
         # real_label are used. (label=1)
         # No detach() is used here as we want to calculate the gradients w.r.t.
         # the generator this time.
-        pred_frame_label = netFD(fake_data).view(-1)
-        pred_temp_label = netTD(t.cat((data_original, fake_data), dim=1)).view(
-            -1
-        )
+        pred_frame_label = netFD(fake_data)
+        pred_temp_label = netTD(t.cat((data_original, fake_data), dim=1))
 
         # ipdb.set_trace()
-        errG = criterion(pred_temp_label, real_label) + criterion(
-            pred_frame_label, real_label
-        )  # +  criterion(fake_data, y)
+
+        
+        errG =  criterion(pred_temp_label, real_label) + criterion(pred_frame_label, real_label) #+  criterion(fake_data, y) 
+   
         # if we have nash equilibrium, we don't want to add random guess to the loss
         # ipdb.set_trace()
         inc_acc_G += (
@@ -342,6 +344,10 @@ def train_single_epoch(
         # Check progress of training.
         if i % 50 == 0:
 
+            t.save(netG.state_dict(), os.path.join(curdir, "models", "netG_epoch_" + str(epoch) + ".pth"))
+            t.save(netFD.state_dict(), os.path.join(curdir, "models", "netFD_epoch_" + str(epoch) + ".pth"))
+            t.save(netTD.state_dict(), os.path.join(curdir, "models", "netTD_epoch_" + str(epoch) + ".pth"))
+            
             fake_data = netG(data).cpu()
             visualize_predictions(data, y, fake_data, epoch, img_path)
             print(
@@ -374,7 +380,7 @@ def train():
     params = {
         "bsize": 8,  # Batch size during training.
         "imsize": 32,  # Spatial size of training images. All images will be resized to this size during preprocessing.
-        "nc": 1,  # Number of channels
+        "nc": 4,  # Number of channels
         "nz": 32,  # Size of the Z latent matrix (imsize * z)
         "ngf": 64,  # Size of feature maps in the generator. The depth will be multiples of this.
         "ndf": 2,  # Size of features maps in the discriminator. The depth will be multiples of this.
@@ -418,9 +424,9 @@ def train():
     print(netTD)
     print(netFD)
 
-    # netTD.load_state_dict(t.load(os.path.join(curdir, 'models/netTD_epoch_10.pth'), map_location=device))
-    # netFD.load_state_dict(t.load(os.path.join(curdir, 'models/netFD_epoch_10.pth'), map_location=device))
-    # netG.load_state_dict(t.load(os.path.join(curdir, 'models/netG_epoch_2.pth'), map_location=device))
+    netTD.load_state_dict(t.load(os.path.join(curdir, 'models/netTD_epoch_1.pth'), map_location=device))
+    netFD.load_state_dict(t.load(os.path.join(curdir, 'models/netFD_epoch_1.pth'), map_location=device))
+    netG.load_state_dict(t.load(os.path.join(curdir, 'models/netG_epoch_1.pth'), map_location=device))
 
     params_dict = {
         "netG": get_number_of_params(netG),
@@ -461,7 +467,9 @@ def train():
             in_seq_len=params["in_seq_len"],
             out_seq_len=params["out_seq_len"],
         )
-
+        # test_result = test(test_data_loader, netG, netFD, netTD, device, epoch, params)
+        # results = test_result
+        # print(json.dumps(results, indent=4))
         train_result = train_single_epoch(
             dataloader=train_data_loader,
             netG=netG,

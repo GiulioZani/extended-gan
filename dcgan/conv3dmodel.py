@@ -61,10 +61,13 @@ class ConvBlock(nn.Module):
         if dropout > 0:
             layers.append(nn.Dropout3d(dropout))
 
-        if act==t.sigmoid:
-            layers.append( nn.Sigmoid())
-        else:
-            layers.append(nn.ReLU())
+        self.act = act
+        if act == t.prelu:
+            self.act = nn.PReLU(32)
+        # if act==t.sigmoid:
+        #     layers.append( nn.Sigmoid())
+        # else:
+        #     layers.append(nn.ReLU())
 
 
 
@@ -73,7 +76,7 @@ class ConvBlock(nn.Module):
         self.layers = nn.Sequential(*layers)
 
     def forward(self, x):
-        return self.layers(x)
+        return self.act(self.layers(x))
 
 class GaussianNoise(nn.Module):
 
@@ -103,15 +106,15 @@ class ConvGenerator(nn.Module):
         self.layers = nn.Sequential(
             GaussianNoise(params['gaussian_noise_std']),
             ConvBlock(
-                params['generator_in_seq_len'], mlp * 24 * mlp, kernel_size=4, padding='same', dropout=False
+                params['generator_in_seq_len'], mlp * 18 * mlp, kernel_size=4, padding='same', dropout=False
             ),
-            ConvBlock(mlp * 24 * mlp, mlp * 12* mlp, 4, padding="same", dropout=False),
+            ConvBlock(mlp * 18 * mlp, mlp * 12* mlp, 4, padding="same", dropout=False),
             ConvBlock(mlp * 12* mlp, mlp * 8* mlp, 4, padding="same", dropout=False),
-            ConvBlock(mlp * 8* mlp, mlp * 2 * mlp, 4, padding="same", dropout=False),
+            ConvBlock(mlp * 8* mlp, mlp * 2 * mlp, 4, padding="same", dropout=False, act=t.prelu),
             ConvBlock(
                 mlp * 2 * mlp,
                 params['out_seq_len'],
-                params['out_seq_len'],
+                4,
                 padding="same",
                 act=t.sigmoid,
                 batchnorm=False,
@@ -244,7 +247,7 @@ class Conv3DTemporalDiscriminator(nn.Module):
         x = self.layers(x)
         # ipdb.set_trace()
 
-        return x.squeeze()
+        return x
 
 
 # t.leaky_relu = F.leaky_relu(x, 0.2, True)
@@ -272,4 +275,4 @@ class Conv3DFrameDiscriminator(nn.Module):
         # for layer in self.layers:
         #     x = layer(x)
         # ipdb.set_trace()
-        return x.squeeze()
+        return x
