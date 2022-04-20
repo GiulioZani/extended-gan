@@ -9,27 +9,25 @@ import h5py
 class DataLoader:
     def __init__(
         self,
-        folder: str,
+        file: str,
         batch_size: int,
         device: t.device,
+        train: bool,
         *,
         crop=64,
         shuffle: bool = True,
         in_seq_len: int = 4,
         out_seq_len: int = 4,
     ):
+        self.train = train
         self.in_seq_len = in_seq_len
         self.out_seq_len = out_seq_len
         self.tot_seq_len = in_seq_len + out_seq_len
         self.crop = crop
-        self.data_folder = folder
         self.device = device
         self.batch_size = batch_size
         self.file_index = 0
-        self.folder = folder
-        self.files = tuple(
-            os.path.join(folder, fn) for fn in sorted(os.listdir(folder))
-        )
+        self.files = (file, )
         self.shuffle = shuffle
         if self.shuffle:
             rand_indices = t.randperm(len(self.files))
@@ -43,7 +41,7 @@ class DataLoader:
             raise StopIteration
         # reads the next file in h5 format
         with h5py.File(self.files[self.file_index], "r") as f:
-            data = t.from_numpy(f["default"][:])
+            data = t.from_numpy(f['train' if self.train else 'test'][:])
         # data = t.load(self.files[self.file_index])
         self.file_index += 1
         result = self.__segmentify(data)
@@ -74,9 +72,7 @@ class DataLoader:
         xs = t.stack(tuple(s[: self.in_seq_len] for s in result))
         ys = t.stack(tuple(s[self.in_seq_len :] for s in result))
         rand_indices = (
-            t.randperm(result.shape[0])
-            if self.shuffle
-            else t.arange(result.shape[0])
+            t.randperm(result.shape[0]) if self.shuffle else t.arange(result.shape[0])
         )
         results = (
             xs[rand_indices].float().to(self.device),
@@ -98,21 +94,21 @@ def get_loaders(
     in_seq_len: int = 12,
     out_seq_len: int = 6,
 ) -> tuple[DataLoader, DataLoader]:
-    test_folder = os.path.join(data_location, "test")
-    train_folder = os.path.join(data_location, "train")
     return (
         DataLoader(
-            train_folder,
+            data_location,
             train_batch_size,
             device,
+            train=True,
             in_seq_len=in_seq_len,
             out_seq_len=out_seq_len,
             crop=crop,
         ),
         DataLoader(
-            test_folder,
+            data_location,
             test_batch_size,
             device,
+            train=False,
             in_seq_len=in_seq_len,
             out_seq_len=out_seq_len,
             crop=crop,
