@@ -11,11 +11,7 @@ def get_number_parameters(model: t.nn.Module):
 
 
 def visualize_predictions(
-    x: t.Tensor,
-    y: t.Tensor,
-    preds: t.Tensor,
-    epoch=1,
-    path="imgs/",
+    x: t.Tensor, y: t.Tensor, preds: t.Tensor, epoch=1, path="imgs/",
 ):
     if not os.path.exists(path):
         os.mkdir(path)
@@ -49,12 +45,10 @@ def plot_history(
 ):
     plt.clf()
     plt.plot(
-        history["train_loss"],
-        label="Train loss",
+        history["train_loss"], label="Train loss",
     )
     plt.plot(
-        history["val_loss"],
-        label="Val loss",
+        history["val_loss"], label="Val loss",
     )
     plt.legend()
     plt.title(title)
@@ -111,4 +105,3 @@ def denormalize(x, mean, var):
     mean = t.mean(mean)
     var = t.var(var)
     return x * var + mean
-

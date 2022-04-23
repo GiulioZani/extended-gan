@@ -5,7 +5,8 @@ import ipdb
 from tqdm import tqdm
 import netCDF4
 
-def preprocess(in_dir:str='/mnt/tmp/', out_file_name:str='/mnt/tmp/data.h5'):
+
+def preprocess(in_dir: str = "/mnt/tmp/", out_file_name: str = "/mnt/tmp/data.h5"):
     vars = [
         ("Sea Surface Height", "SSH.nc", "zos"),
         ("Eastword Wind Speed", "CUR_uo.nc", "uo"),
@@ -25,9 +26,9 @@ def preprocess(in_dir:str='/mnt/tmp/', out_file_name:str='/mnt/tmp/data.h5'):
         # ax.title.set_text(simple_name)
         # ax.axis("off")
         # plt.savefig(f"{simple_name}")
-        second_min = t.min(subsampled_data[subsampled_data!=t.min(subsampled_data)])
+        second_min = t.min(subsampled_data[subsampled_data != t.min(subsampled_data)])
         subsampled_data[subsampled_data == t.min(subsampled_data)] = second_min
-        normalized_data = 0.1 + 0.9*(subsampled_data - t.min(subsampled_data)) / (
+        normalized_data = 0.1 + 0.9 * (subsampled_data - t.min(subsampled_data)) / (
             t.max(subsampled_data) - t.min(subsampled_data)
         )
         acc.append(normalized_data)
@@ -64,6 +65,6 @@ def train_test_split(
 
 
 if __name__ == "__main__":
-    intermediate = '/mnt/tmp/data.h5'
-    preprocess('/mnt/tmp/', intermediate)
+    intermediate = "/mnt/tmp/data.h5"
+    preprocess("/mnt/tmp/", intermediate)
     train_test_split(intermediate)
