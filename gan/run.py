@@ -29,26 +29,32 @@ def run():
             "--" + key, help=key + " to use", default=value, type=type(value),
         )
     params = parser.parse_args()
-    print(json.dumps(params.__dict__, indent=4))
+    training_dict = {
+        key: val for key, val in params.__dict__.items() if key != "action"
+    }
+    print(json.dumps(training_dict, indent=4))
     cur_folder = os.path.basename(os.path.dirname(__file__))
     module = __import__(
         f"{cur_folder}.models.{params.model}.model", fromlist=["models"]
     )
     model = module.Model(params)
+    save_path = os.path.join(cur_folder, "models", params.model)
     if params.action == "train":
         print("Training")
+        with open(os.path.join(save_path, "train_params.json"), "w") as f:
+            json.dump(training_dict, f, indent=4)
         trainer = Trainer(
             max_epochs=params.max_epochs,
             gpus=(1 if params.cuda else None),
             callbacks=[
                 EarlyStopping(
-                    monitor="val_loss", patience=params.early_stopping_patience
+                    monitor="val_mse", patience=params.early_stopping_patience
                 )
             ],
         )
         data_module = DeepCoastalDataModule(params)
         trainer.fit(model=model, datamodule=data_module)
-        ipdb.set_trace()
+        t.save(model.state_dict(), os.path.join(save_path, "model.pt"))
     if params.action == "test":
         pass
         # test(

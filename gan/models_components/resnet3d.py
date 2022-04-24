@@ -236,7 +236,7 @@ class ResNet3DAutoEncoder(nn.Module):
         n_input_channels = params.in_seq_len
         block_inplanes = list(block_inplanes)
         block_inplanes[-1] = params.in_seq_len
-
+        block_inplanes[0] = params.out_seq_len
         block_inplanes = [int(x * widen_factor) for x in block_inplanes]
         self.in_planes = block_inplanes[0]
         self.no_max_pool = no_max_pool
