@@ -68,7 +68,7 @@ class GANLightning(LightningModule):
             # Create labels for the real data. (label=1)
             # x_frames = x.view(batch_size * x_seq_len, channels, height, width)
             y_frames = y.reshape(batch_size * y_seq_len, channels, height, width)
-            fake_frames = self.fake_y_detached.view(
+            fake_frames = self.fake_y_detached.reshape(
                 batch_size * y_seq_len, channels, height, width
             )
             y_batch_size = batch_size * y_seq_len
