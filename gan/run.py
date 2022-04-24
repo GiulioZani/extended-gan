@@ -1,7 +1,5 @@
 from argparse import ArgumentParser
 import os
-from .test import test
-from torch import optim
 import torch as t
 import json
 import ipdb
@@ -39,28 +37,24 @@ def run():
     )
     model = module.Model(params)
     save_path = os.path.join(cur_folder, "models", params.model)
+    print("Training")
+    with open(os.path.join(save_path, "train_params.json"), "w") as f:
+        json.dump(training_dict, f, indent=4)
+    trainer = Trainer(
+        max_epochs=params.max_epochs,
+        gpus=(1 if params.cuda else None),
+        callbacks=[
+            EarlyStopping(
+                monitor="val_mse", patience=params.early_stopping_patience
+            )
+        ],
+    )
+    data_module = DeepCoastalDataModule(params)
     if params.action == "train":
-        print("Training")
-        with open(os.path.join(save_path, "train_params.json"), "w") as f:
-            json.dump(training_dict, f, indent=4)
-        trainer = Trainer(
-            max_epochs=params.max_epochs,
-            gpus=(1 if params.cuda else None),
-            callbacks=[
-                EarlyStopping(
-                    monitor="val_mse", patience=params.early_stopping_patience
-                )
-            ],
-        )
-        data_module = DeepCoastalDataModule(params)
         trainer.fit(model=model, datamodule=data_module)
         t.save(model.state_dict(), os.path.join(save_path, "model.pt"))
-    if params.action == "test":
-        pass
-        # test(
-        #    params=params, temp_disc=temp_disc, frame_disc=frame_disc, gen=gen
-        # )
 
-
+    trainer.test(model=model, datamodule=data_module)
+     
 if __name__ == "__main__":
     run()

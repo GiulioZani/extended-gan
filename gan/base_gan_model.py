@@ -5,22 +5,20 @@ from pytorch_lightning import LightningModule
 import ipdb
 import h5py
 from .utils.data_manager import DataManger
-
+from argparse import Namespace
 
 class GANLightning(LightningModule):
     def __init__(
         self,
-        data_location: str,
-        lr: float = 0.0002,
-        b1: float = 0.5,
-        b2: float = 0.999,
+        params: Namespace,
     ):
         super().__init__()
+
         # reads file data_location in h5 format
-        self.data_manager = DataManger(data_path=data_location)
-        self.lr = lr
-        self.b1 = b1
-        self.b2 = b2
+        self.data_manager = DataManger(data_path=params.data_location)
+        self.lr = params.lr
+        self.b1 = params.b1
+        self.b2 = params.b2
         self.generator = nn.Sequential()
         self.frame_discriminator = nn.Sequential()
         self.temporal_discriminator = nn.Sequential()
@@ -118,37 +116,44 @@ class GANLightning(LightningModule):
         x, y = batch
         pred_y = self(x)
         se = F.mse_loss(pred_y, y, reduction="sum")
-        denorm_pred_y = self.data_manager.denormalize(pred_y)
-        denorm_y = self.data_manager.denormalize(y)
+        denorm_pred_y = self.data_manager.denormalize(pred_y, self.device)
+        denorm_y = self.data_manager.denormalize(y, self.device)
         ae = F.l1_loss(denorm_pred_y, denorm_y, reduction="sum")
-        mask_pred_y = self.data_manager.discretize(denorm_pred_y)
-        mask_y = self.data_manager.discretize(denorm_y)
+        mask_pred_y = self.data_manager.discretize(denorm_pred_y, self.device)
+        mask_y = self.data_manager.discretize(denorm_y, self.device)
         tn, fp, fn, tp = t.bincount(
-            mask_y.flatten() + mask_pred_y.flatten(), minlength=4,
+            mask_y.flatten()*2 + mask_pred_y.flatten(), minlength=4,
         )
         total_lengh = mask_y.numel()
-        return {"se": se, "ae": ae, "tn": tn, "fp": fp, "fn": fn, "tp": tp, "total_lengh": total_lengh}
+        return {
+            "se": se,
+            "ae": ae,
+            "tn": tn,
+            "fp": fp,
+            "fn": fn,
+            "tp": tp,
+            "total_lengh": total_lengh,
+        }
 
     def test_epoch_end(self, outputs):
-        total_lenght = t.stack([x["total_lengh"] for x in outputs]).sum()
-        mse = t.stack([x["se"] for x in outputs])/total_lenght
-        mae = t.stack([x["ae"] for x in outputs])/total_lenght
-        tn = t.stack([x["tn"] for x in outputs])/total_lenght
-        fp = t.stack([x["fp"] for x in outputs])/total_lenght
-        fn = t.stack([x["fn"] for x in outputs])/total_lenght
-        tp = t.stack([x["tp"] for x in outputs])/total_lenght
+        total_lenght = sum([x["total_lengh"] for x in outputs])
+        mse = (t.stack([x["se"] for x in outputs]).sum() / total_lenght)
+        mae = (t.stack([x["ae"] for x in outputs]).sum() / total_lenght)
+        tn = (t.stack([x["tn"] for x in outputs]).sum() / total_lenght)
+        fp = (t.stack([x["fp"] for x in outputs]).sum() / total_lenght)
+        fn = (t.stack([x["fn"] for x in outputs]).sum() / total_lenght)
+        tp = (t.stack([x["tp"] for x in outputs]).sum() / total_lenght)
         precision = tp / (tp + fp)
         recall = tp / (tp + fn)
         accuracy = (tp + tn) / (tp + tn + fp + fn)
         f1 = 2 * precision * recall / (precision + recall)
-        self.log("test_mse", mse, prog_bar=True)
-        self.log("test_mae", mae, prog_bar=True)
-        self.log("test_accuracy", tn, prog_bar=True)
-        self.log("test_precision", precision, prog_bar=True)
-        self.log("test_recall", recall, prog_bar=True)
-        self.log("test_f1", f1, prog_bar=True)
+        self.log("mse", mse.item(), prog_bar=True)
+        self.log("mae", mae.item(), prog_bar=True)
+        self.log("accuracy", accuracy.item(), prog_bar=True)
+        self.log("precision", precision.item(), prog_bar=True)
+        self.log("recall", recall.item(), prog_bar=True)
+        self.log("f1", f1.item(), prog_bar=True)
 
-        
     def configure_optimizers(self):
         lr = self.lr
         b1 = self.b1

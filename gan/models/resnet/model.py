@@ -9,7 +9,7 @@ from argparse import Namespace
 
 class Model(GANLightning):
     def __init__(self, params: Namespace):
-        super().__init__()
+        super().__init__(params)
         self.generator = ResNet3DAutoEncoder(params)
         self.temporal_discriminator = ResNet3DClassifier(params)
         self.frame_discriminator = FrameDiscriminator(params)
