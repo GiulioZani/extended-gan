@@ -3,7 +3,7 @@ import torch as t
 import json
 import csv
 import os
-
+import ipdb
 
 class GANLogger(LightningLoggerBase):
     def __init__(
@@ -14,6 +14,7 @@ class GANLogger(LightningLoggerBase):
         super().__init__()
         self.csv_path = os.path.join(loggin_path, "training_log.csv")
         self.last_train_mse_loss = -1.0
+        self.test_metrics = {}
         with open(self.csv_path, "w") as f:
             writer = csv.writer(f)
             writer.writerow(train_header)
@@ -27,6 +28,9 @@ class GANLogger(LightningLoggerBase):
                 writer.writerow(
                     (metrics["epoch"], self.last_train_mse_loss, metrics["val_mse"])
                 )
+        else:
+            self.test_metrics.update(metrics)
+            ipdb.set_trace()
 
     @property
     def name(self):

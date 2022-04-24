@@ -51,10 +51,14 @@ def run():
         ],
     )
     data_module = DeepCoastalDataModule(params)
+    model_path = os.path.join(save_path, "model.pt")
     if params.action == "train":
         trainer.fit(model=model, datamodule=data_module)
-        t.save(model.state_dict(), os.path.join(save_path, "model.pt"))
+        t.save(model.state_dict(), model_path)
 
+    if os.path.exists(model_path):
+        print(f"\nLoading model from '{model_path}'\n")
+        model.load_state_dict(t.load(model_path))
     trainer.test(model=model, datamodule=data_module)
      
 if __name__ == "__main__":
