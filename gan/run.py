@@ -6,6 +6,7 @@ import ipdb
 from pytorch_lightning import Trainer
 from pytorch_lightning.callbacks import EarlyStopping
 from .data_loader import DeepCoastalDataModule
+from .gan_logger import GANLogger
 
 # in the main function if parses the arguments and initializes the appropiate models
 def run():
@@ -49,6 +50,7 @@ def run():
                 monitor="val_mse", patience=params.early_stopping_patience
             )
         ],
+        logger=GANLogger(params),
     )
     data_module = DeepCoastalDataModule(params)
     model_path = os.path.join(save_path, "model.pt")
