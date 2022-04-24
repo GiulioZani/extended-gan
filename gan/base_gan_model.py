@@ -155,12 +155,25 @@ class GANLightning(LightningModule):
         recall = tp / (tp + fn)
         accuracy = (tp + tn) / (tp + tn + fp + fn)
         f1 = 2 * precision * recall / (precision + recall)
+        test_metrics = {
+            "mse": mse,
+            "mae": mae,
+            "tn": tn,
+            "fp": fp,
+            "fn": fn,
+            "tp": tp,
+            "precision": precision,
+            "recall": recall,
+            "accuracy": accuracy,
+            "f1": f1,
+        }
         self.log("mse", mse.item(), prog_bar=True)
         self.log("mae", mae.item(), prog_bar=True)
         self.log("accuracy", accuracy.item(), prog_bar=True)
         self.log("precision", precision.item(), prog_bar=True)
         self.log("recall", recall.item(), prog_bar=True)
         self.log("f1", f1.item(), prog_bar=True)
+        self.log("test_performance", test_metrics)
         
 
     def configure_optimizers(self):

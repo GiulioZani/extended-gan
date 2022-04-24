@@ -28,9 +28,9 @@ class GANLogger(LightningLoggerBase):
                 writer.writerow(
                     (metrics["epoch"], self.last_train_mse_loss, metrics["val_mse"])
                 )
-        else:
-            self.test_metrics.update(metrics)
+        elif "test_performance" in metrics:
             ipdb.set_trace()
+            self.test_metrics.update(metrics)
 
     @property
     def name(self):
