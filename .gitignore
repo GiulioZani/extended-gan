@@ -7,7 +7,7 @@ datasets/
 *.pth
 # C extensions
 *.so
-lightinin_logs/
+lightning_logs/
 # Distribution / packaging
 .Python
 build/
