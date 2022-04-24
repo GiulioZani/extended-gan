@@ -167,13 +167,15 @@ class GANLightning(LightningModule):
             "accuracy": accuracy,
             "f1": f1,
         }
+        test_metrics = {k: v.item() for k, v in test_metrics.items()}
         self.log("mse", mse.item(), prog_bar=True)
         self.log("mae", mae.item(), prog_bar=True)
         self.log("accuracy", accuracy.item(), prog_bar=True)
         self.log("precision", precision.item(), prog_bar=True)
         self.log("recall", recall.item(), prog_bar=True)
         self.log("f1", f1.item(), prog_bar=True)
-        self.log("test_performance", test_metrics)
+        # ipdb.set_trace()
+        # self.log("test_performance", test_metrics)
         
 
     def configure_optimizers(self):
