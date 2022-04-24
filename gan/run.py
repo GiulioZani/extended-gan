@@ -21,7 +21,7 @@ def run():
     )
     parser.add_argument("model", help="model to use", choices=choices)
     parser.add_argument(
-        "action", help="train or test the model", choices=["train", "test"]
+        "action", help="train or test the model", choices=["train", "test", "merge-results"] # TODO: add merge-results
     )
     for key, value in default_params.items():
         parser.add_argument(
