@@ -5,6 +5,7 @@ from pytorch_lightning import LightningModule
 import ipdb
 import h5py
 from .utils.data_manager import DataManger
+from .utils.visualize_predictions import visualize_predictions
 from argparse import Namespace
 
 class GANLightning(LightningModule):
@@ -14,6 +15,7 @@ class GANLightning(LightningModule):
     ):
         super().__init__()
 
+        self.params = params
         # reads file data_location in h5 format
         self.data_manager = DataManger(data_path=params.data_location)
         self.lr = params.lr
@@ -65,7 +67,7 @@ class GANLightning(LightningModule):
         if optimizer_idx == 1:
             # Create labels for the real data. (label=1)
             # x_frames = x.view(batch_size * x_seq_len, channels, height, width)
-            y_frames = y.view(batch_size * y_seq_len, channels, height, width)
+            y_frames = y.reshape(batch_size * y_seq_len, channels, height, width)
             fake_frames = self.fake_y_detached.view(
                 batch_size * y_seq_len, channels, height, width
             )
@@ -114,6 +116,10 @@ class GANLightning(LightningModule):
 
     def test_step(self, batch: tuple[t.Tensor, t.Tensor], batch_idx: int):
         x, y = batch
+        if batch_idx == 0:
+            # visualize_predictions(x, y, self(x), self.params.save_path)
+            pass
+
         pred_y = self(x)
         se = F.mse_loss(pred_y, y, reduction="sum")
         denorm_pred_y = self.data_manager.denormalize(pred_y, self.device)
@@ -153,6 +159,7 @@ class GANLightning(LightningModule):
         self.log("precision", precision.item(), prog_bar=True)
         self.log("recall", recall.item(), prog_bar=True)
         self.log("f1", f1.item(), prog_bar=True)
+        
 
     def configure_optimizers(self):
         lr = self.lr

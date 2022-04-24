@@ -37,6 +37,7 @@ def run():
     )
     model = module.Model(params)
     save_path = os.path.join(cur_folder, "models", params.model)
+    params.save_path = save_path
     print("Training")
     with open(os.path.join(save_path, "train_params.json"), "w") as f:
         json.dump(training_dict, f, indent=4)
