@@ -43,7 +43,7 @@ class GANLightning(LightningModule):
             fake_y = self(x)
             # i save it as property to avoid recomputing it for the discriminators
             self.fake_y_detached = fake_y.detach()  # used later by discriminators
-            fake_data_frames = fake_y.view(
+            fake_data_frames = fake_y.reshape(
                 batch_size * y_seq_len, channels, height, width
             )
             pred_frame_label = self.frame_discriminator(fake_data_frames)
