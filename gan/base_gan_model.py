@@ -109,6 +109,9 @@ class GANLightning(LightningModule):
 
     def validation_step(self, batch: tuple[t.Tensor, t.Tensor], batch_idx: int):
         x, y = batch
+        if batch_idx == 0:
+            visualize_predictions(x, y, self(x), path=self.params.save_path)
+
         pred_y = self(x)
         loss = F.mse_loss(pred_y, y)
         self.log("val_mse", loss, prog_bar=True)
@@ -117,8 +120,7 @@ class GANLightning(LightningModule):
     def test_step(self, batch: tuple[t.Tensor, t.Tensor], batch_idx: int):
         x, y = batch
         if batch_idx == 0:
-            # visualize_predictions(x, y, self(x), self.params.save_path)
-            pass
+            visualize_predictions(x, y, self(x), path=self.params.save_path)
 
         pred_y = self(x)
         se = F.mse_loss(pred_y, y, reduction="sum")

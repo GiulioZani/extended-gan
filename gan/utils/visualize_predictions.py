@@ -13,7 +13,11 @@ class Bunch(dict):
         self.__dict__ = self
 
 
-def visualize_predictions(x, y, preds, epoch=1, path="", show_plot=False):
+def visualize_predictions(x, y, preds,*,epoch=1, path="", show_plot=False):
+    ch_idx = 1
+    x = x[:, :, ch_idx]
+    y = y[:, :, ch_idx]
+    preds = preds[:, :, ch_idx]
     if path != "" and not os.path.exists(path):
         os.mkdir(path)
     to_plot = [x[0], y[0].squeeze(1), preds[0]]
@@ -21,8 +25,7 @@ def visualize_predictions(x, y, preds, epoch=1, path="", show_plot=False):
     plt.suptitle(f"Epoch {epoch}")
     for i, row in enumerate(ax):
         for j, col in enumerate(row):
-            uba = to_plot[i].cpu().detach().numpy()[j]
-            col.imshow(uba)
+            col.imshow(to_plot[i].cpu().detach().numpy()[j])
 
     row_labels = ["input", "GT", "pred"]
     for ax_, row in zip(ax[:, 0], row_labels):
