@@ -7,8 +7,8 @@ import torch.nn as nn
 import torch as t
 import torch.nn.functional as f
 
-from dl.components.ConvLSTMModule import ConvLSTMBlock
-from dl.components.components import GaussianNoise
+from ...components.ConvLSTMModule import ConvLSTMBlock
+from ...components.components import GaussianNoise
 
 
 
