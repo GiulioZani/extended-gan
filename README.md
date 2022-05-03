@@ -1,8 +1,10 @@
 # Extended gan
-
-To load a 'pt' file:
+To run, first you need to clone:
 ```
-import torch as t
+git clone https://github.com/giuliozani/dlm
+```
 
-my_tensor = t.load('file_name.pt')
+Then do
+```
+python -m dlm <..commandas..>
 ```
