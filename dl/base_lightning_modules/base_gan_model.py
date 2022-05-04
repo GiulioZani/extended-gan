@@ -2,25 +2,33 @@ import torch as t
 import torch.nn as nn
 import torch.nn.functional as F
 from pytorch_lightning import LightningModule
-from .base_model import BaseModel
+# from .base_model import BaseModel
 import ipdb
 import h5py
-from .utils.data_manager import DataManger
-from .utils.visualize_predictions import visualize_predictions
+# from .utils.data_manager import DataManger
+# from .utils.visualize_predictions import visualize_predictions
 from argparse import Namespace
 
+from dl.base_lightning_modules.base_model import BaseRegressionModel
 
-class GANLightning(BaseModel):
+
+class GANLightning(BaseRegressionModel):
     def __init__(
         self, params: Namespace,
     ):
         super().__init__(params)
-
+        # self.params = params
         self.frame_discriminator = nn.Sequential()
         self.temporal_discriminator = nn.Sequential()
         self.fake_y_detached = t.tensor(0.0)
 
+
     def adversarial_loss(self, y_hat: t.Tensor, y: t.Tensor):
+        # squeeze if shapes are (batch_size, 1)
+        if y_hat.shape[-1] == 1:
+            y_hat = y_hat.squeeze()
+        if y.shape[-1] == 1:
+            y = y.squeeze()
         return F.binary_cross_entropy(y_hat, y)
 
     def training_step(
