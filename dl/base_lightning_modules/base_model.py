@@ -28,7 +28,7 @@ class BaseRegressionModel(LightningModule):
         x, y = batch
         y_pred = self(x)
         loss = self.loss(y_pred, y)
-        return loss
+        return {"loss": loss}
 
     def validation_epoch_end(self, outputs):
         avg_loss = t.stack([x["val_loss"] for x in outputs]).mean()
@@ -39,10 +39,9 @@ class BaseRegressionModel(LightningModule):
         )
         return {"val_mse": avg_loss}
 
-
     def training_epoch_end(self, outputs):
-        avg_loss = t.stack([x[0]["train_mse"] for x in outputs]).mean()
-        self.log("train_mse", avg_loss, prog_bar=True)
+        avg_loss = t.stack([x["loss"] for x in outputs]).mean()
+        self.log("loss", avg_loss, prog_bar=True)
 
     def validation_step(self, batch: tuple[t.Tensor, t.Tensor], batch_idx: int):
         x, y = batch
@@ -67,7 +66,8 @@ class BaseRegressionModel(LightningModule):
         mask_pred_y = self.data_manager.discretize(denorm_pred_y, self.device)
         mask_y = self.data_manager.discretize(denorm_y, self.device)
         tn, fp, fn, tp = t.bincount(
-            mask_y.flatten()*2 + mask_pred_y.flatten(), minlength=4,
+            mask_y.flatten() * 2 + mask_pred_y.flatten(),
+            minlength=4,
         )
         total_lengh = mask_y.numel()
         return {
@@ -82,12 +82,12 @@ class BaseRegressionModel(LightningModule):
 
     def test_epoch_end(self, outputs):
         total_lenght = sum([x["total_lengh"] for x in outputs])
-        mse = (t.stack([x["se"] for x in outputs]).sum() / total_lenght)
-        mae = (t.stack([x["ae"] for x in outputs]).sum() / total_lenght)
-        tn = (t.stack([x["tn"] for x in outputs]).sum() / total_lenght)
-        fp = (t.stack([x["fp"] for x in outputs]).sum() / total_lenght)
-        fn = (t.stack([x["fn"] for x in outputs]).sum() / total_lenght)
-        tp = (t.stack([x["tp"] for x in outputs]).sum() / total_lenght)
+        mse = t.stack([x["se"] for x in outputs]).sum() / total_lenght
+        mae = t.stack([x["ae"] for x in outputs]).sum() / total_lenght
+        tn = t.stack([x["tn"] for x in outputs]).sum() / total_lenght
+        fp = t.stack([x["fp"] for x in outputs]).sum() / total_lenght
+        fn = t.stack([x["fn"] for x in outputs]).sum() / total_lenght
+        tp = t.stack([x["tp"] for x in outputs]).sum() / total_lenght
         precision = tp / (tp + fp)
         recall = tp / (tp + fn)
         accuracy = (tp + tn) / (tp + tn + fp + fn)
@@ -111,26 +111,13 @@ class BaseRegressionModel(LightningModule):
         """
         self.log("test_performance", test_metrics, prog_bar=True)
 
-
     def configure_optimizers(self):
-        lr = self.lr
-        b1 = self.b1
-        b2 = self.b2
+        lr = self.params.lr
+        b1 = self.params.b1
+        b2 = self.params.b2
 
         generator_optimizer = t.optim.Adam(
             self.generator.parameters(), lr=lr, betas=(b1, b2)
         )
-        frame_discriminator_optimizer = t.optim.Adam(
-            self.frame_discriminator.parameters(), lr=lr, betas=(b1, b2)
-        )
-        temporal_discriminator_optimizer = t.optim.Adam(
-            self.temporal_discriminator.parameters(), lr=lr, betas=(b1, b2)
-        )
-        return (
-            [
-                generator_optimizer,
-                frame_discriminator_optimizer,
-                temporal_discriminator_optimizer,
-            ],
-            [],
-        )
+
+        return generator_optimizer

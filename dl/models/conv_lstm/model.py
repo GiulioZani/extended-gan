@@ -1,10 +1,10 @@
-from gan.models.conv_lstm.old_model import EncoderDecoderConvLSTM
-from ...base_gan_model import GANLightning
-from ...models_components.resnet3d import (
+from dl.base_lightning_modules.base_gan_model import GANLightning
+from .old_model import EncoderDecoderConvLSTM
+from ...components.resnet3d import (
     ResNet3DAutoEncoder,
     ResNet3DClassifier,
 )
-from ...models_components.conv2dmodel import FrameDiscriminator
+from ...components.conv2dmodel import FrameDiscriminator
 from argparse import Namespace
 
 
