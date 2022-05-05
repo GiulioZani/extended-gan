@@ -95,6 +95,7 @@ class EncoderDecoderConvLSTM(nn.Module):
             nn.Linear(32, 16, bias=True),
             nn.LeakyReLU(0.2, inplace=True),
             nn.Linear(16, 4, bias=True),
+            nn.Sigmoid(),
         )
 
         self.noise = 0.0001

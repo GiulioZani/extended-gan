@@ -476,3 +476,9 @@ class ConvLSTMTemporalDiscriminator(nn.Module):
         # ipdb.set_trace()
 
         return self.dense_layer(x).squeeze(1)
+
+
+
+
+
+

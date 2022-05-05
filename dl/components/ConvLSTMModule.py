@@ -270,11 +270,11 @@ class ConvLSTM(nn.Module):
 
 
 class ConvLSTMClassifier(nn.Module):
-    def __init__(self, params, nf=8):
+    def __init__(self, params, compact=False):
         super(ConvLSTMClassifier, self).__init__()
 
         self.params = params
-        in_chan = 4
+        in_chan = params.n_channels
 
         self.conv_lstm_out_chan = 32
 
@@ -333,16 +333,32 @@ class ConvLSTMClassifier(nn.Module):
         #     ),
         #     nn.Sigmoid()
         # )
+
+
+
         self.classifier = nn.Sequential(
-            nn.Linear(4096, 2048),
-            nn.ReLU(),
-            nn.Linear(2048, 512),
-            nn.ReLU(),
-            nn.Linear(512, 1),
-            nn.Sigmoid(),
+            nn.Linear(4096*32, 1),
+            # nn.LeakyReLU(0.2, inplace=True),
+            # nn.Linear()
+            nn.Sigmoid()
+    
             
         )
 
+
+        # self.big_classif = nn.Sequential(
+        #     nn.Linear(4096*32, 4096),
+        #     nn.LeakyReLU(0.2, inplace=True),
+        #     nn.Linear(4096, 2048),
+        #     nn.LeakyReLU(0.2, inplace=True),
+        #     nn.Linear(2048, 1),
+        #     nn.Sigmoid()
+    
+            
+        # )
+
+
+        # self.classifier = self.big_classif
         # self.init_weights()
 
         self.noise = 0.0001
@@ -394,7 +410,7 @@ class ConvLSTMClassifier(nn.Module):
                 hidden[i] = (input_tensor, c)
 
         # ipdb.set_trace()
-        input_tensor = input_tensor.max(dim=1)[0]
+        # input_tensor = input_tensor.mean(dim=1)
         input_tensor = input_tensor.view(b, -1)
         output = self.classifier(input_tensor)
         # ipdb.set_trace()
