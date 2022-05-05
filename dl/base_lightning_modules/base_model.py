@@ -47,8 +47,8 @@ class BaseRegressionModel(LightningModule):
         x, y = batch
         if batch_idx == 0:
             visualize_predictions(x, y, self(x), path=self.params.save_path)
-
-        pred_y = self(x)
+        y = y.cpu()
+        pred_y = self(x).cpu()
         loss = F.mse_loss(pred_y, y)
         self.log("val_mse", loss, prog_bar=True)
         return {"val_mse": loss, "val_loss": loss}
