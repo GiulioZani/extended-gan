@@ -78,6 +78,7 @@ class GANLightning(BaseRegressionModel):
             frame_disc_loss = self.adversarial_loss(
                 self.frame_discriminator(frames).squeeze(), labels
             )
+            self.log('fd_loss', frame_disc_loss, prog_bar=True)
             tqdm_dict = {"fd_loss": frame_disc_loss}
             return {
                 "loss": frame_disc_loss,
@@ -96,6 +97,7 @@ class GANLightning(BaseRegressionModel):
             pred_labels = self.temporal_discriminator(sequences)
             temp_disc_loss = self.adversarial_loss(pred_labels, labels)
             tqdm_dict = {"td_loss": temp_disc_loss}
+            self.log('td_loss', temp_disc_loss, prog_bar=True)
             return {
                 "loss": temp_disc_loss,
                 "progress_bar": tqdm_dict,
