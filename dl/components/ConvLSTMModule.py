@@ -334,29 +334,23 @@ class ConvLSTMClassifier(nn.Module):
         #     nn.Sigmoid()
         # )
 
-
+        # self.pool = nn.MaxPool3d(kernel_size=(1, 2, 2), stride=(1, 2, 2))
 
         self.classifier = nn.Sequential(
-            nn.Linear(4096*32, 1),
+            nn.Linear(4096 , 1),
             # nn.LeakyReLU(0.2, inplace=True),
-            # nn.Linear()
-            nn.Sigmoid()
-    
-            
+            # nn.Linear(512, 256),
+            # nn.LeakyReLU(0.2, inplace=True),
+            # nn.Linear(256, 1),
+            nn.Sigmoid(),
         )
+        # nn.Sequential(
+        #             nn.Linear(4096*32, 1),
+        #             # nn.LeakyReLU(0.2, inplace=True),
+        #             # nn.Linear()
+        #             nn.Sigmoid()
 
-
-        # self.big_classif = nn.Sequential(
-        #     nn.Linear(4096*32, 4096),
-        #     nn.LeakyReLU(0.2, inplace=True),
-        #     nn.Linear(4096, 2048),
-        #     nn.LeakyReLU(0.2, inplace=True),
-        #     nn.Linear(2048, 1),
-        #     nn.Sigmoid()
-    
-            
-        # )
-
+        #         )
 
         # self.classifier = self.big_classif
         # self.init_weights()
@@ -411,6 +405,7 @@ class ConvLSTMClassifier(nn.Module):
 
         # ipdb.set_trace()
         # input_tensor = input_tensor.mean(dim=1)
+        input_tensor = input_tensor.max(dim=1)[0]
         input_tensor = input_tensor.view(b, -1)
         output = self.classifier(input_tensor)
         # ipdb.set_trace()

@@ -6,7 +6,7 @@ from ...components.ConvLSTMModule import ConvLSTMClassifier
 from ...components.resnetmodel import ResNetFrameDiscriminator
 from ...components.conv3dmodel import CompactConv3DDiscriminator, Conv3DTemporalDiscriminator
 from ...components.lstmconvmodel import ConvLSTMTemporalDiscriminator
-from ...components.conv2dmodel import CompactFrameDiscriminator, FrameDiscriminator
+from ...components.conv2dmodel import CompactFrameDiscriminator, FrameDiscriminator, SmallFrameDiscriminator
 from ...components.resnet3d import ResNet3DClassifier
 from ...components.conv3dmodel import Conv3DFrameDiscriminator
 from .modules import AxialFrameDiscriminator, AxialGenerator, AxialTemporalDiscriminator
@@ -16,4 +16,4 @@ class Model(GANLightning):
         super().__init__(params)
         self.generator = AxialGenerator(params)
         self.temporal_discriminator = ConvLSTMClassifier(params)
-        self.frame_discriminator = ResNetFrameDiscriminator(params)
+        self.frame_discriminator = SmallFrameDiscriminator(params)
