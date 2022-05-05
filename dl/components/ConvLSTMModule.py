@@ -2,11 +2,20 @@ import ipdb
 import torch
 import torch.nn as nn
 
+from dl.components.conv2dmodel import CompactFrameDiscriminator
 
 
 class ConvLSTMBlock(nn.Module):
-    
-    def __init__(self, in_channel, out_channel, kernel_size=(3,3), bias=True, batch_norm=True, dropout=0.2, act=nn.LeakyReLU(0.2, inplace=True)) -> None:
+    def __init__(
+        self,
+        in_channel,
+        out_channel,
+        kernel_size=(3, 3),
+        bias=True,
+        batch_norm=True,
+        dropout=0.2,
+        act=nn.LeakyReLU(0.2, inplace=True),
+    ) -> None:
         super().__init__()
 
         self.conv_cell = ConvLSTMCell(in_channel, out_channel, kernel_size, bias)
@@ -17,18 +26,16 @@ class ConvLSTMBlock(nn.Module):
         self.batch_norm = batch_norm
         self.dropout = dropout
 
-
-
     def init_hidden(self, x):
         b, _, _, h, w = x.size()
         h_t, c_t = self.conv_cell.init_hidden(batch_size=b, image_size=(h, w))
         return h_t, c_t
 
     def forward(self, input_tensor, cur_state):
-        
+
         # h_t, c_t = cur_state
         # ipdb.set_trace()
-        
+
         h_t, c_t = self.conv_cell(input_tensor, cur_state)
         x = h_t
         if self.batch_norm:
@@ -37,8 +44,6 @@ class ConvLSTMBlock(nn.Module):
             x = self.dout(x)
         # x = self.act(x)
         return x, c_t
-
-
 
 
 class ConvLSTMCell(nn.Module):
@@ -263,3 +268,134 @@ class ConvLSTM(nn.Module):
             param = [param] * num_layers
         return param
 
+
+class ConvLSTMClassifier(nn.Module):
+    def __init__(self, params, nf=8):
+        super(ConvLSTMClassifier, self).__init__()
+
+        self.params = params
+        in_chan = 4
+
+        self.conv_lstm_out_chan = 32
+
+        self.z_dim = 16
+        """ ARCHITECTURE 
+
+        # Encoder (ConvLSTM)
+        # Encoder Vector (final hidden state of encoder)
+        # Decoder (ConvLSTM) - takes Encoder Vector as input
+        # Decoder (3D CNN) - produces regression predictions for our model
+
+        
+
+        """
+        self.act = torch.sigmoid
+
+        self.conv_encoders = [
+            ConvLSTMBlock(
+                in_chan,
+                32,
+                kernel_size=(3, 3),
+                bias=True,
+                dropout=False,
+                batch_norm=True,
+            ),
+            ConvLSTMBlock(
+                32,
+                32,
+                kernel_size=(3, 3),
+                bias=True,
+                dropout=False,
+                batch_norm=True,
+            ),
+            ConvLSTMBlock(
+                32,
+                32,
+                kernel_size=(3, 3),
+                bias=True,
+                dropout=False,
+                batch_norm=True,
+            ),
+        ]
+
+        self.conv_lstms = self.conv_encoders  # + self.conv_decoder
+
+        for i in range(len(self.conv_lstms)):
+            setattr(self, "conv_lstm_" + str(i), self.conv_lstms[i])
+
+        # self.decoder_CNN = nn.Sequential(
+
+        #     nn.Conv3d(
+        #         in_channels=64,
+        #         out_channels=in_chan,
+        #         kernel_size=(1, 3, 3),
+        #         padding=(0, 1, 1),
+        #     ),
+        #     nn.Sigmoid()
+        # )
+        self.classifier = nn.Sequential(
+            nn.Linear(4096, 2048),
+            nn.ReLU(),
+            nn.Linear(2048, 512),
+            nn.ReLU(),
+            nn.Linear(512, 1),
+            nn.Sigmoid(),
+            
+        )
+
+        # self.init_weights()
+
+        self.noise = 0.0001
+
+    def forward(self, x):
+
+        # ipdb.set_trace()
+
+        # x = x.unsqueeze(2)
+        # ipdb.set_trace()
+
+        """
+        Parameters
+        ----------
+        input_tensor:
+            5-D Tensor of shape (b, t, c, h, w)        #   batch, time, channel, height, width
+        """
+        # x = x.unsqueeze(2)
+        # ipdb.set_trace()
+
+        # find size of different input dimensions
+
+        # noise vector adding to channels
+
+        # x = self.gaussian_noise(x)
+
+        b, seq_len, _, h, w = x.size()
+
+        # ipdb.set_trace()
+
+        # initialize hidden states
+        hidden = None
+        if hidden == None:
+            hidden = []
+            for i in range(len(self.conv_lstms)):
+                state = self.conv_lstms[i].init_hidden(x)
+                hidden += [state]
+
+        # loop over sequences
+        for t in range(seq_len):
+
+            input_tensor = x[:, t, :, :, :]
+            # ipdb.set_trace()
+            # looping over encoders
+            for i in range(2):
+                input_tensor, c = self.conv_encoders[i](
+                    input_tensor=input_tensor, cur_state=hidden[i]
+                )
+                hidden[i] = (input_tensor, c)
+
+        # ipdb.set_trace()
+        input_tensor = input_tensor.max(dim=1)[0]
+        input_tensor = input_tensor.view(b, -1)
+        output = self.classifier(input_tensor)
+        # ipdb.set_trace()
+        return output

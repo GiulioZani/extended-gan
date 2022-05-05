@@ -345,22 +345,22 @@ class CompactFrameDiscriminator(nn.Module):
         super().__init__()
 
         # Input Dimension: (nc) x 64 x 64
-        self.conv1 = nn.Conv2d(params.n_channels, 4, 4, 2, 1, bias=False)
+        self.conv1 = nn.Conv2d(64, 8, 4, 2, 1, bias=False)
 
         # Input Dimension: (ndf) x 32 x 32
-        self.conv2 = nn.Conv2d(4, 4, 4, 2, 1, bias=False)
-        self.bn2 = nn.BatchNorm2d(4 )
+        self.conv2 = nn.Conv2d(8, 8, 4, 2, 1, bias=False)
+        self.bn2 = nn.BatchNorm2d(8 )
 
         # Input Dimension: (ndf*2) x 16 x 16
-        self.conv3 = nn.Conv2d(4 ,4, 4, 2, 1, bias=False)
-        self.bn3 = nn.BatchNorm2d(4  )
+        self.conv3 = nn.Conv2d(8 ,8, 4, 2, 1, bias=False)
+        self.bn3 = nn.BatchNorm2d(8  )
 
         # Input Dimension: (ndf*4) x 8 x 8
-        self.conv4 = nn.Conv2d(4,4, 4, 2, 1, bias=False)
-        self.bn4 = nn.BatchNorm2d(4 )
+        self.conv4 = nn.Conv2d(8,8, 4, 2, 1, bias=False)
+        self.bn4 = nn.BatchNorm2d(8 )
 
         # Input Dimension: (ndf*8) x 4 x 4
-        self.conv5 = nn.Conv2d(4, 1, 4, 1, 0, bias=False)
+        self.conv5 = nn.Conv2d(8, 1, 4, 1, 0, bias=False)
 
     def forward(self, x):
         x = F.leaky_relu(self.conv1(x), 0.2, True)

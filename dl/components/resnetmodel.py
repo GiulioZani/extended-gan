@@ -434,7 +434,7 @@ class ResNetFrameDiscriminator(nn.Module):
         ):  # => Don't apply non-linearity on output
             self.input_net = nn.Sequential(
                 nn.Conv2d(
-                    self.params["out_seq_len"],
+                    self.params.n_channels,
                     c_hidden[0],
                     kernel_size=3,
                     padding=1,
@@ -444,7 +444,7 @@ class ResNetFrameDiscriminator(nn.Module):
         else:
             self.input_net = nn.Sequential(
                 nn.Conv2d(
-                    self.params["out_seq_len"],
+                    self.params.n_channels,
                     c_hidden[0],
                     kernel_size=3,
                     padding=1,
@@ -472,8 +472,7 @@ class ResNetFrameDiscriminator(nn.Module):
         self.blocks = nn.Sequential(*blocks)
 
         # Mapping to classification output
-        if self.outputblock == "avgpool_plus_dense":
-
+        if False:
             self.output_net = AVGPoolConcatDenseLayer(self.params, c_hidden[-1], 16, 64)
         else:
             self.output_net = nn.Sequential(

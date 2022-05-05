@@ -8,7 +8,7 @@ from ...components.components import GaussianNoise
 
 
 class AxialGenerator(nn.Module):
-    def __init__(self, params, embedding_dim=64):
+    def __init__(self, params, embedding_dim=256):
         super().__init__()
         self.params = params
         self.embedding_dim = embedding_dim
@@ -23,7 +23,6 @@ class AxialGenerator(nn.Module):
         self.image_embedding = nn.Sequential(
             nn.Linear(4096, embedding_dim, bias=True),
             nn.LeakyReLU(0.2, inplace=True),
-
         )
 
         # decoding the embedding to the output
@@ -45,30 +44,32 @@ class AxialGenerator(nn.Module):
                 dim_heads=4,
                 num_dimensions=2,  # number of axial dimensions (images is 2, video is 3, or more)
             ),
-            nn.LeakyReLU(0.2),
+            nn.LeakyReLU(0.5),
+            nn.Dropout(0.40),
+            AxialAttention(
+                dim=self.embedding_dim,  # embedding dimension
+                dim_index=-1,  # where is the embedding dimension
+                heads=8,  # number of heads for multi-head attention,
+                dim_heads=4,
+                num_dimensions=2,  # number of axial dimensions (images is 2, video is 3, or more)
+            ),
+            nn.Dropout(0.40),
+            nn.LeakyReLU(0.5),
+            AxialAttention(
+                dim=self.embedding_dim,  # embedding dimension
+                dim_index=-1,  # where is the embedding dimension
+                heads=8,  # number of heads for multi-head attention,
+                dim_heads=4,
+                num_dimensions=2,  # number of axial dimensions (images is 2, video is 3, or more)
+            ),
             # nn.Dropout(0.10),
-            AxialAttention(
-                dim=self.embedding_dim,  # embedding dimension
-                dim_index=-1,  # where is the embedding dimension
-                heads=8,  # number of heads for multi-head attention,
-                dim_heads=4,
-                num_dimensions=2,  # number of axial dimensions (images is 2, video is 3, or more)
-            ),
-            nn.LeakyReLU(0.2),
-            AxialAttention(
-                dim=self.embedding_dim,  # embedding dimension
-                dim_index=-1,  # where is the embedding dimension
-                heads=8,  # number of heads for multi-head attention,
-                dim_heads=4,
-                num_dimensions=2,  # number of axial dimensions (images is 2, video is 3, or more)
-            ),
-            nn.LeakyReLU(0.2),
+            # nn.LeakyReLU(0.2),
             # AxialAttention(
             #     dim=self.embedding_dim,  # embedding dimension
             #     dim_index=-1,  # where is the embedding dimension
             #     heads=8,  # number of heads for multi-head attention,
             #     dim_heads=4,
-            #     num_dimensions=4,  # number of axial dimensions (images is 2, video is 3, or more)
+            #     num_dimensions=2,  # number of axial dimensions (images is 2, video is 3, or more)
             # ),
             # nn.LeakyReLU(0.2),
             # AxialAttention(
@@ -76,7 +77,7 @@ class AxialGenerator(nn.Module):
             #     dim_index=-1,  # where is the embedding dimension
             #     heads=8,  # number of heads for multi-head attention,
             #     dim_heads=4,
-            #     num_dimensions=4,  # number of axial dimensions (images is 2, video is 3, or more)
+            #     num_dimensions=2,  # number of axial dimensions (images is 2, video is 3, or more)
             # ),
             # nn.LeakyReLU(0.2),
         )
@@ -98,9 +99,9 @@ class AxialGenerator(nn.Module):
 
         x = x.unsqueeze(-1)
         # ipdb.set_trace()
-        
+
         x = x.view(x.shape[0], self.params.in_seq_len, self.params.n_channels, -1)
-        
+
         x = self.image_embedding(x)
 
         x = self.positional_embedding(x)
@@ -109,6 +110,12 @@ class AxialGenerator(nn.Module):
 
         x = self.embedding_decoder(x)
 
-        x = x.view(x.shape[0], self.params.in_seq_len, self.params.n_channels, self.params.imsize, self.params.imsize)
+        x = x.view(
+            x.shape[0],
+            self.params.in_seq_len,
+            self.params.n_channels,
+            self.params.imsize,
+            self.params.imsize,
+        )
 
         return x
