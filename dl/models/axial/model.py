@@ -1,5 +1,5 @@
-from dl.base_lightning_modules.base_gan_model import GANLightning
-from dl.base_lightning_modules.base_model import BaseRegressionModel
+from ...base_lightning_modules.base_gan_model import GANLightning
+# from ...base_lightning_modules.base_model import BaseRegressionModel
 
 from argparse import Namespace
 
