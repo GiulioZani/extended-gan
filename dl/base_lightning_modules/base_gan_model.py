@@ -9,7 +9,7 @@ import h5py
 # from .utils.visualize_predictions import visualize_predictions
 from argparse import Namespace
 
-from dl.base_lightning_modules.base_model import BaseRegressionModel
+from .base_model import BaseRegressionModel
 
 
 class GANLightning(BaseRegressionModel):
