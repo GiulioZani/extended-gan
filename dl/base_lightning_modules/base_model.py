@@ -50,7 +50,7 @@ class BaseRegressionModel(LightningModule):
         y = y.cpu()
         pred_y = self(x).cpu()
         loss = F.mse_loss(pred_y, y)
-        self.log("val_mse", loss, prog_bar=True)
+        # self.log("val_mse", loss, prog_bar=True)
         return {"val_mse": loss, "val_loss": loss}
 
     def test_step(self, batch: tuple[t.Tensor, t.Tensor], batch_idx: int):

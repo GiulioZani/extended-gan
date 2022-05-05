@@ -78,7 +78,7 @@ class GANLightning(BaseRegressionModel):
             frame_disc_loss = self.adversarial_loss(
                 self.frame_discriminator(frames).squeeze(), labels
             )
-            self.log('fd_loss', frame_disc_loss, prog_bar=True)
+            #self.log('fd_loss', frame_disc_loss, prog_bar=True)
             tqdm_dict = {"fd_loss": frame_disc_loss}
             return {
                 "loss": frame_disc_loss,
@@ -97,7 +97,7 @@ class GANLightning(BaseRegressionModel):
             pred_labels = self.temporal_discriminator(sequences)
             temp_disc_loss = self.adversarial_loss(pred_labels, labels)
             tqdm_dict = {"td_loss": temp_disc_loss}
-            self.log('td_loss', temp_disc_loss, prog_bar=True)
+            # self.log('td_loss', temp_disc_loss, prog_bar=True)
             return {
                 "loss": temp_disc_loss,
                 "progress_bar": tqdm_dict,
@@ -106,7 +106,11 @@ class GANLightning(BaseRegressionModel):
 
     def training_epoch_end(self, outputs):
         avg_loss = t.stack([x[0]["train_mse"] for x in outputs]).mean()
+        fd_loss = t.stack([x[1]["loss"] for x in outputs]).mean()
+        td_loss = t.stack([x[2]["loss"] for x in outputs]).mean()
         self.log("train_mse", avg_loss, prog_bar=True)
+        self.log("train_fd", fd_loss, prog_bar=True)
+        self.log("train_td", td_loss, prog_bar=True)
 
     
     def configure_optimizers(self):
