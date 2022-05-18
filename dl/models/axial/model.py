@@ -1,11 +1,12 @@
 from dl.base_lightning_modules.base_model import BaseRegressionModel
-from ...base_lightning_modules.base_gan_2 import GANLightning
+from dl.models.axial.modules import AxialFrameDiscriminator, AxialTemporalDiscriminator
+from ...base_lightning_modules.base_gan_model import GANLightning
 
 # from ...base_lightning_modules.base_model import BaseRegressionModel
 
 from argparse import Namespace
 from ...components.ConvLSTMModule import ConvLSTMClassifier
-from ...components.resnetmodel import ResNetFrameDiscriminator
+from ...components.resnetmodel import ResNetFrameDiscriminator, ResNetTemproalDiscriminator
 from ...components.conv3dmodel import (
     CompactConv3DDiscriminator,
     Conv3DTemporalDiscriminator,
@@ -24,17 +25,9 @@ from .axial import AxialGenerator
 # from .axial import AxialGenerator
 
 
-class Model(BaseRegressionModel):
+class Model(GANLightning):
     def __init__(self, params: Namespace):
         super().__init__(params)
         self.generator = AxialGenerator(params)
-        self.temporal_discriminator = ResNet3DClassifier(
-            params,
-            layers=(3, 3, 3, 3),
-            block_inplanes=(4, 8, 8, 16),
-        )
-        self.frame_discriminator = ResNet3DClassifier(
-            params,
-            layers=(2, 2, 2, 2),
-            block_inplanes=(4, 8, 8, 16),
-        )
+        self.temporal_discriminator = AxialTemporalDiscriminator(params)
+        self.frame_discriminator = ResNetFrameDiscriminator(params)

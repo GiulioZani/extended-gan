@@ -5,38 +5,24 @@ import torch.nn as nn
 from axial_attention import AxialAttention, AxialPositionalEmbedding
 import ipdb
 from ...components.components import GaussianNoise
+from ..axial_autoencoder_embedding.modules import AutoEncoder
 
 
 class AxialGenerator(nn.Module):
-    def __init__(self, params, embedding_dim=128):
+    def __init__(self, params, embedding_dim=256):
         super().__init__()
         self.params = params
         self.embedding_dim = embedding_dim
+        self.generator = AutoEncoder(embedding_dim=self.embedding_dim)
 
-        # embedding encoder
-        self.embedding_encoder = nn.Sequential(
-            nn.Linear(1, embedding_dim, bias=True),
-            # what activation should we use?
-            nn.LeakyReLU(0.2, inplace=True),
-        )
-
-        self.image_embedding = nn.Sequential(
-            nn.Linear(4096, embedding_dim, bias=False),
-            # nn.LeakyReLU(0.2, inplace=True),
-            # nn.Linear(2048, 1024, bias=False),
-            # nn.LeakyReLU(0.2, inplace=True),
-            # nn.Linear(1024, embedding_dim, bias=False),
-        )
-
-        # decoding the embedding to the output
-        self.embedding_decoder = nn.Sequential(
-            nn.Linear(embedding_dim, 4096, bias=True),
-            # nn.LeakyReLU(0.2, inplace=True),
-            # nn.Linear(1024, 2048, bias=True),
-            # nn.LeakyReLU(0.2, inplace=True),
-            # nn.Linear(2048, 4096, bias=True),
-            nn.Sigmoid(),
-        )
+        # load auto encoder weights
+        # self.load_state_dict(
+        #     t.load(
+        #         "./dl/models/axial_autoencoder_embedding/checkpoint.ckpt"
+        #     )
+        # )
+        self.image_embedding = self.generator.encoder
+        self.embedding_decoder = self.generator.decoder
 
         self.positional_embedding = AxialPositionalEmbedding(
             embedding_dim,
