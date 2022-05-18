@@ -29,9 +29,11 @@ class BasicBlock(nn.Module):
 
         self.conv1 = conv3x3x3(in_planes, planes, stride)
         self.bn1 = nn.BatchNorm3d(planes)
+        self.dr1 = nn.Dropout3d(0.4)
         self.relu = nn.ReLU(inplace=True)
         self.conv2 = conv3x3x3(planes, planes)
         self.bn2 = nn.BatchNorm3d(planes)
+        self.dr2 = nn.Dropout3d(0.4)
         self.downsample = downsample
         self.stride = stride
 
@@ -40,10 +42,12 @@ class BasicBlock(nn.Module):
 
         out = self.conv1(x)
         out = self.bn1(out)
+        # out = self.dr1(out)
         out = self.relu(out)
 
         out = self.conv2(out)
         out = self.bn2(out)
+        # out = self.dr2(out)
 
         if self.downsample is not None:
             residual = self.downsample(x)

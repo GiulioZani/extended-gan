@@ -8,7 +8,7 @@ from ...components.components import GaussianNoise
 
 
 class AxialGenerator(nn.Module):
-    def __init__(self, params, embedding_dim=256):
+    def __init__(self, params, embedding_dim=128):
         super().__init__()
         self.params = params
         self.embedding_dim = embedding_dim
@@ -21,13 +21,21 @@ class AxialGenerator(nn.Module):
         )
 
         self.image_embedding = nn.Sequential(
-            nn.Linear(4096, embedding_dim, bias=True),
-            nn.LeakyReLU(0.2, inplace=True),
+            nn.Linear(4096, embedding_dim, bias=False),
+            # nn.LeakyReLU(0.2, inplace=True),
+            # nn.Linear(2048, 1024, bias=False),
+            # nn.LeakyReLU(0.2, inplace=True),
+            # nn.Linear(1024, embedding_dim, bias=False),
         )
 
         # decoding the embedding to the output
         self.embedding_decoder = nn.Sequential(
-            nn.Linear(embedding_dim, 4096, bias=True), nn.Sigmoid()
+            nn.Linear(embedding_dim, 4096, bias=True),
+            # nn.LeakyReLU(0.2, inplace=True),
+            # nn.Linear(1024, 2048, bias=True),
+            # nn.LeakyReLU(0.2, inplace=True),
+            # nn.Linear(2048, 4096, bias=True),
+            nn.Sigmoid(),
         )
 
         self.positional_embedding = AxialPositionalEmbedding(
@@ -45,7 +53,7 @@ class AxialGenerator(nn.Module):
                 num_dimensions=2,  # number of axial dimensions (images is 2, video is 3, or more)
             ),
             nn.LeakyReLU(0.5),
-            nn.Dropout(0.40),
+            nn.Dropout(0.2),
             AxialAttention(
                 dim=self.embedding_dim,  # embedding dimension
                 dim_index=-1,  # where is the embedding dimension
@@ -53,7 +61,7 @@ class AxialGenerator(nn.Module):
                 dim_heads=4,
                 num_dimensions=2,  # number of axial dimensions (images is 2, video is 3, or more)
             ),
-            nn.Dropout(0.40),
+            nn.Dropout(0.2),
             nn.LeakyReLU(0.5),
             AxialAttention(
                 dim=self.embedding_dim,  # embedding dimension
@@ -63,7 +71,7 @@ class AxialGenerator(nn.Module):
                 num_dimensions=2,  # number of axial dimensions (images is 2, video is 3, or more)
             ),
             # nn.Dropout(0.10),
-            # nn.LeakyReLU(0.2),
+            nn.LeakyReLU(0.2),
             # AxialAttention(
             #     dim=self.embedding_dim,  # embedding dimension
             #     dim_index=-1,  # where is the embedding dimension

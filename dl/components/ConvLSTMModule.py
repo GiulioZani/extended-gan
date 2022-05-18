@@ -297,7 +297,7 @@ class ConvLSTMClassifier(nn.Module):
                 32,
                 kernel_size=(3, 3),
                 bias=True,
-                dropout=False,
+                # dropout=0.3,
                 batch_norm=True,
             ),
             ConvLSTMBlock(
@@ -305,7 +305,7 @@ class ConvLSTMClassifier(nn.Module):
                 32,
                 kernel_size=(3, 3),
                 bias=True,
-                dropout=False,
+                # dropout=0.3,
                 batch_norm=True,
             ),
             ConvLSTMBlock(
@@ -313,7 +313,7 @@ class ConvLSTMClassifier(nn.Module):
                 32,
                 kernel_size=(3, 3),
                 bias=True,
-                dropout=False,
+                # dropout=0.4,
                 batch_norm=True,
             ),
         ]
@@ -337,7 +337,7 @@ class ConvLSTMClassifier(nn.Module):
         # self.pool = nn.MaxPool3d(kernel_size=(1, 2, 2), stride=(1, 2, 2))
 
         self.classifier = nn.Sequential(
-            nn.Linear(4096 , 1),
+            nn.Linear(16*16 , 1),
             # nn.LeakyReLU(0.2, inplace=True),
             # nn.Linear(512, 256),
             # nn.LeakyReLU(0.2, inplace=True),

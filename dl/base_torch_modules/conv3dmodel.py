@@ -39,7 +39,7 @@ class ConvBlock(nn.Module):
         bias=True,
         stride=1,
         padding=0,
-        dropout=0.01,
+        dropout=False,
         act=F.relu,
         batchnorm=True,
         dilation=1

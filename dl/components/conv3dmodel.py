@@ -109,7 +109,11 @@ class ConvGenerator(nn.Module):
                 dropout=False,
             ),
             ConvBlock(
-                mlp * 18 * mlp, mlp * 12 * mlp, 4, padding="same", dropout=False,
+                mlp * 18 * mlp,
+                mlp * 12 * mlp,
+                4,
+                padding="same",
+                dropout=False,
             ),
             ConvBlock(mlp * 12 * mlp, mlp * 8 * mlp, 4, padding="same", dropout=False),
             ConvBlock(
@@ -159,7 +163,9 @@ class Conv3DGenerator(nn.Module):
         self.layers = nn.Sequential(
             GaussianNoise(0.0001),
             Conv3DEncoderBlock(
-                params, in_channel=params.n_channels, channels=[32, 64, 128, 256, 512],
+                params,
+                in_channel=params.n_channels,
+                channels=[32, 64, 128, 256, 512],
             ),
             ConvBlock(
                 512,
@@ -209,8 +215,7 @@ class Conv3DEncoderBlock(nn.Module):
 class Conv3DTemporalDiscriminator(nn.Module):
     def __init__(self, params):
         super().__init__()
-        ndf = 4
-
+        ndf = 3
         self.layers = nn.Sequential(
             # ConvBlock(2 * nc, ndf , 4, act=act, batchnorm=False),
             # Conv3DEncoderBlock(params, in_channel=params['nc'], channels=[ 16, 16, 1]),
@@ -221,6 +226,7 @@ class Conv3DTemporalDiscriminator(nn.Module):
                 act=t.rrelu,
                 batchnorm=True,
                 padding="same",
+                dropout=0.2,
             ),
             ConvBlock(
                 ndf,
@@ -229,6 +235,7 @@ class Conv3DTemporalDiscriminator(nn.Module):
                 act=t.rrelu,
                 batchnorm=True,
                 padding="same",
+                dropout=0.2,
             ),
             ConvBlock(
                 2 * ndf,
@@ -237,6 +244,7 @@ class Conv3DTemporalDiscriminator(nn.Module):
                 act=t.rrelu,
                 batchnorm=True,
                 padding="same",
+                dropout=0.3,
             ),
             ConvBlock(
                 4 * ndf,
@@ -245,29 +253,52 @@ class Conv3DTemporalDiscriminator(nn.Module):
                 act=t.rrelu,
                 batchnorm=True,
                 padding="same",
+                dropout=0.3,
             ),
             ConvBlock(
-                8 * ndf, 1, kernel_size=4, act=t.rrelu, batchnorm=False, padding="same",
+                8 * ndf,
+                1,
+                kernel_size=4,
+                act=t.rrelu,
+                batchnorm=False,
+                padding="same",
+                dropout=0.2
             ),
             # nn.Flatten(),
             # nn.Linear( 81920, 1),
             # nn.Sigmoid()
             # AVGPool3DConcatDenseLayer( params, 1 ,params['in_seq_len'] + params['out_seq_len'], params['imsize'], 64),
-            SimpleOneLayerClassifer(
-                params,
-                (
-                    1
-                    * (params.in_seq_len + params.out_seq_len)
-                    * params.imsize
-                    * params.imsize
-                ),
+        )
+        #         SimpleOneLayerClassifer(
+        #     params,
+        #     (
+        #         1
+        #         * (params.in_seq_len *2)
+        #         * params.imsize
+        #         * params.imsize
+        #     ),
+        # ),
+
+        self.classifier = nn.Sequential(
+            nn.Linear(
+                (params.in_seq_len * 2) * params.imsize * params.imsize,
+                512
+                
             ),
+            nn.Dropout(0.8),
+            nn.ReLU(),
+            nn.Linear(512, 1),    
+            # nn.ReLU(),
+            # nn.Linear(params.imsize * params.imsize, 1),
+            nn.Sigmoid(),
         )
 
     def forward(self, x):
         x = x.permute(0, 2, 3, 4, 1)
 
         x = self.layers(x)
+        x = x.flatten(start_dim=1)
+        x = self.classifier(x)
         # ipdb.set_trace()
 
         return x
@@ -319,9 +350,10 @@ class Conv3DFrameDiscriminator(nn.Module):
             # ),
         )
 
-        self.classifier =  SimpleOneLayerClassifer(
-                params, (1 * params.imsize * params.imsize),
-            )
+        self.classifier = SimpleOneLayerClassifer(
+            params,
+            (1 * params.imsize * params.imsize),
+        )
 
     def forward(self, x):
         x = x.permute(0, 2, 3, 4, 1)
@@ -373,14 +405,10 @@ class CompactConv3DDiscriminator(nn.Module):
             #     batchnorm=True,
             #     padding="same",
             # )
-            
         )
 
-        self.classifier =  nn.Sequential(
-            nn.Linear(256, 128),
-            nn.ReLU(),
-            nn.Linear(128, 1),
-            nn.Sigmoid()
+        self.classifier = nn.Sequential(
+            nn.Linear(256, 128), nn.ReLU(), nn.Linear(128, 1), nn.Sigmoid()
         )
 
     def forward(self, x):

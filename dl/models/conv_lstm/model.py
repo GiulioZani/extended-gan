@@ -1,3 +1,4 @@
+from ...base_torch_modules.conv3dmodel import Conv3DFrameDiscriminator, Conv3DTemporalDiscriminator
 from ...base_lightning_modules.base_gan_2 import GANLightning
 from ...components.ConvLSTMModule import ConvLSTMClassifier
 from .modules import EncoderDecoderConvLSTM
@@ -13,5 +14,5 @@ class Model(GANLightning):
     def __init__(self, params: Namespace):
         super().__init__(params)
         self.generator = EncoderDecoderConvLSTM(params)
-        self.temporal_discriminator = ResNet3DClassifier(params, seq_len=20)
-        self.frame_discriminator = ResNet3DClassifier(params, seq_len=10)
+        self.temporal_discriminator = ResNet3DClassifier(params)
+        self.frame_discriminator = ResNet3DClassifier(params)
