@@ -76,8 +76,8 @@ class AxialGenerator(nn.Module):
                 dim_heads=4,
                 num_dimensions=2,  # number of axial dimensions (images is 2, video is 3, or more)
             ),
-            nn.LeakyReLU(0.2),
-            nn.Dropout(0.10),
+            # nn.LeakyReLU(0.2),
+            # nn.Dropout(0.10),
             AxialAttention(
                 dim=self.embedding_dim,  # embedding dimension
                 dim_index=-1,  # where is the embedding dimension
@@ -85,8 +85,8 @@ class AxialGenerator(nn.Module):
                 dim_heads=4,
                 num_dimensions=2,  # number of axial dimensions (images is 2, video is 3, or more)
             ),
-            nn.Dropout(0.10),
-            nn.LeakyReLU(0.2),
+            # nn.Dropout(0.10),
+            # nn.LeakyReLU(0.2),
             AxialAttention(
                 dim=self.embedding_dim,  # embedding dimension
                 dim_index=-1,  # where is the embedding dimension

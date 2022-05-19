@@ -12,13 +12,12 @@ class AutoEncoder(nn.Module):
             nn.LeakyReLU(0.2),
         )
         self.decoder = nn.Sequential(
-            nn.Linear(embedding_dim, 4096, bias=True),
+            nn.Linear(embedding_dim, 4096, bias=False),
             nn.Sigmoid(),
         )
 
     def forward(self, x):
         b, s, c, h, w = x.size()
-        # ipdb.set_trace()
         x = x.view(x.size(0), x.size(1), x.size(2), -1)
         x = self.encoder(x)
         x = self.decoder(x)

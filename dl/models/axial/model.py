@@ -29,5 +29,5 @@ class Model(GANLightning):
     def __init__(self, params: Namespace):
         super().__init__(params)
         self.generator = AxialGenerator(params)
-        self.temporal_discriminator = AxialTemporalDiscriminator(params)
+        self.temporal_discriminator = ResNet3DClassifier(params)
         self.frame_discriminator = ResNetFrameDiscriminator(params)

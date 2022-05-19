@@ -21,8 +21,15 @@ class AxialGenerator(nn.Module):
         self.load_state_dict(
             t.load("./dl/models/axial_autoencoder_embedding/checkpoint.ckpt")
         )
+
         self.embedding_encoder = self.generator.encoder
         self.embedding_decoder = self.generator.decoder
+
+        # disable encoder decoder backprop
+        for param in self.embedding_encoder.parameters():
+            param.requires_grad = False
+        for param in self.embedding_decoder.parameters():
+            param.requires_grad = False
 
         self.attentions = nn.Sequential(
             AxialAttention(
@@ -70,11 +77,13 @@ class AxialGenerator(nn.Module):
     def net(self, x):
 
         x = self.noise_layer(x)
-
+        b, s, c, h, w = x.size()
+        # ipdb.set_trace()
+        x = x.view(x.size(0), x.size(1), x.size(2), -1)
         x = self.embedding_encoder(x)
         x = self.attentions(x)
         x = self.embedding_decoder(x)
-
+        x = x.view(b, s, c, h, w)
         # x = x.view(
         #     x.shape[0],
         #     self.params.in_seq_len,
@@ -100,7 +109,7 @@ class AxialTemporalDiscriminator(nn.Module):
 
         # decoding the embedding to the output
         self.embedding_decoder = nn.Sequential(
-            nn.Linear(embedding_dim * params.n_channels, 1, bias=True),
+            nn.Linear(embedding_dim * params.n_channels * 20, 1, bias=True),
             nn.Sigmoid(),
         )
 
@@ -152,7 +161,7 @@ class AxialTemporalDiscriminator(nn.Module):
         x = self.image_embedding(x)
         x = self.attentions(x)
 
-        x = t.max(x, dim=1)[0]
+        # x = t.max(x, dim=1)[0]
         x = x.view(x.shape[0], -1)
 
         x = self.embedding_decoder(x)
@@ -184,25 +193,25 @@ class AxialFrameDiscriminator(nn.Module):
                 dim_index=-1,  # where is the embedding dimension
                 heads=8,  # number of heads for multi-head attention
                 dim_heads=4,
-                num_dimensions=2,  # number of axial dimensions (images is 2, video is 3, or more)
+                num_dimensions=1,  # number of axial dimensions (images is 2, video is 3, or more)
             ),
             nn.LeakyReLU(0.2),
             # nn.Dropout(0.10),
-            # AxialAttention(
-            #     dim=self.embedding_dim,  # embedding dimension
-            #     dim_index=-1,  # where is the embedding dimension
-            #     heads=8,  # number of heads for multi-head attention,
-            #     dim_heads=4,
-            #     num_dimensions=3,  # number of axial dimensions (images is 2, video is 3, or more)
-            # ),
+            AxialAttention(
+                dim=self.embedding_dim,  # embedding dimension
+                dim_index=-1,  # where is the embedding dimension
+                heads=8,  # number of heads for multi-head attention,
+                dim_heads=4,
+                num_dimensions=1,  # number of axial dimensions (images is 2, video is 3, or more)
+            ),
             # nn.LeakyReLU(0.2),
-            # AxialAttention(
-            #     dim=self.embedding_dim,  # embedding dimension
-            #     dim_index=-1,  # where is the embedding dimension
-            #     heads=8,  # number of heads for multi-head attention,
-            #     dim_heads=4,
-            #     num_dimensions=3,  # number of axial dimensions (images is 2, video is 3, or more)
-            # ),
+            AxialAttention(
+                dim=self.embedding_dim,  # embedding dimension
+                dim_index=-1,  # where is the embedding dimension
+                heads=8,  # number of heads for multi-head attention,
+                dim_heads=4,
+                num_dimensions=1,  # number of axial dimensions (images is 2, video is 3, or more)
+            ),
             # nn.LeakyReLU(0.2)
         )
 
@@ -221,11 +230,11 @@ class AxialFrameDiscriminator(nn.Module):
             x = self.noise_layer(x, 0.0001)
 
         # ipdb.set_trace()
-        x = x.view(x.shape[0], x.shape[1], x.shape[2], -1)
+        x = x.view(x.shape[0], x.shape[1], -1)
         x = self.embedding_encoder(x)
         x = self.attentions(x)
 
-        x = t.max(x, dim=1)[0]
+        # x = t.max(x, dim=1)[0]
         x = x.view(x.shape[0], -1)
 
         x = self.embedding_decoder(x)
