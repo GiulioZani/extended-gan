@@ -2,8 +2,9 @@ from pytorch_lightning import LightningModule
 import torch as t
 import torch.nn.functional as F
 from argparse import Namespace
+from torchmetrics import Accuracy
 
-from ...utils.visualize_predictions import visualize_predictions
+from .visualize import visualize_predictions
 import matplotlib.pyplot as plt
 import ipdb
 import os
@@ -26,19 +27,26 @@ class BaseRegressionModel(LightningModule):
         x, y = batch
         y_pred = self(x)
         loss = self.loss(y_pred, y)
+
+        if batch_idx % 100 == 0:
+            visualize_predictions(x, y, y_pred, path=self.params.save_path)
+
         return {"loss": loss}
 
     def validation_epoch_end(self, outputs):
         avg_loss = t.stack([x["val_loss"] for x in outputs]).mean()
         self.log("val_loss", avg_loss, prog_bar=True)
         t.save(
-            self.state_dict(), os.path.join(self.params.save_path, "checkpoint.ckpt"),
+            self.state_dict(),
+            os.path.join(self.params.save_path, "checkpoint.ckpt"),
         )
         return {"val_mse": avg_loss}
 
     def training_epoch_end(self, outputs):
         avg_loss = t.stack([x["loss"] for x in outputs]).mean()
         self.log("loss", avg_loss, prog_bar=True)
+
+
 
     def validation_step(self, batch: tuple[t.Tensor, t.Tensor], batch_idx: int):
         x, y = batch
@@ -57,10 +65,9 @@ class BaseRegressionModel(LightningModule):
 
         pred_y = self(x)
         se = F.mse_loss(pred_y, y, reduction="sum")
-        
 
     def test_epoch_end(self, outputs):
-        
+
         return {}
 
     def configure_optimizers(self):

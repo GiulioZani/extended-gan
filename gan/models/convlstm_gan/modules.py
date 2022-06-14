@@ -50,14 +50,14 @@ class EncoderDecoderConvLSTM(nn.Module):
         self.conv_decoder = [
             ConvLSTMBlock(
                 64,
-                32,
+                64,
                 kernel_size=(3, 3),
                 bias=True,
                 dropout=0.1,
                 batch_norm=True,
             ),
             ConvLSTMBlock(
-                32,
+                64,
                 64,
                 kernel_size=(3, 3),
                 bias=True,
@@ -156,6 +156,6 @@ class EncoderDecoderConvLSTM(nn.Module):
         # autoencoder forward
         outputs = self.autoencoder(x, seq_len, seq_len, hidden)
 
-        outputs = outputs.permute(0, 2, 1, 3, 4).squeeze(2)
-
+        outputs = outputs.permute(0, 2, 1, 3, 4)
+        
         return outputs
