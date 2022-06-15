@@ -11,6 +11,7 @@ import random
 from pytorch_lightning import LightningDataModule
 import torch
 import torch.utils.data as data
+import ipdb
 
 
 def load_mnist(root):
@@ -195,6 +196,8 @@ class MovingMNIST(data.Dataset):
         else:
             images = self.dataset[:, idx, ...]
 
+        # print(np.min(images), np.max(images))
+
         # if self.transform is not None:
         #     images = self.transform(images)
 
@@ -222,13 +225,13 @@ class MovingMNIST(data.Dataset):
         #
         # input = np.concatenate((input, np.expand_dims(pad, 1)), 1)
 
-        output = torch.from_numpy(output / 255.0).contiguous().float()
-        input = torch.from_numpy(input / 255.0).contiguous().float()
+        output = torch.from_numpy(2 * output / 255.0 - 1).contiguous().float()
+        input = torch.from_numpy(2 * input / 255.0 - 1).contiguous().float()
         # print()
         # print(input.size())
         # print(output.size())
 
-        out = [idx, input, output]
+        # out = [idx, input, output]
         return input, output
 
     def __len__(self):

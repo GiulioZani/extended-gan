@@ -31,14 +31,14 @@ class EncoderDecoderConvLSTM(nn.Module):
         self.conv_encoders = [
             ConvLSTMBlock(
                 in_chan,
-                32,
+                64,
                 kernel_size=(3, 3),
                 bias=True,
                 dropout=0.1,
                 batch_norm=True,
             ),
             ConvLSTMBlock(
-                32,
+                64,
                 64,
                 kernel_size=(3, 3),
                 bias=True,

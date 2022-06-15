@@ -10,5 +10,5 @@ class Model(BaseGanLightning):
     def __init__(self, params: Namespace):
         super().__init__(params)
         self.generator = EncoderDecoderConvLSTM(params)
-        self.frame_discriminator = ResNetFrameDiscriminator(params)
-        self.temporal_discriminator = ResNet3DClassifier(params)
+        self.frame_discriminator = ResNetFrameDiscriminator(params, c_hidden=[8, 16, 32])
+        self.temporal_discriminator = ResNet3DClassifier(params, block_inplanes=(4, 8, 16, 32))

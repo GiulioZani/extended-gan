@@ -34,3 +34,4 @@ def visualize_predictions(
     plt.savefig(save_path)
     # plt.show()
     plt.close()
+    # print("visualized predictions", save_path)
