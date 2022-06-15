@@ -9,6 +9,8 @@ import ipdb
 
 from torch.functional import F
 
+from ..conv2d.conv2dmodel import ConvBlock
+
 
 class AxialLayers(nn.Module):
     def __init__(
@@ -45,14 +47,18 @@ class AxialLayers(nn.Module):
             self.attentions.add_module(
                 "layer_{}".format(i), self.__getattr__("layer_{}".format(i))
             )
+            
             if i != self.num_layers - 1:
                 self.do = nn.Dropout(self.dropout)
                 self.attentions.add_module(f"do_{i}", self.do)
 
+
+        
+
     def forward(self, x):
         z = self.attentions(x)
         out = z + x
-        out = F.relu(out)
+        # out = F.relu(out)
         # out = self.do(out)
         return out
 
@@ -149,7 +155,7 @@ class AxialGenerator(nn.Module):
             nn.Tanh(),
         )
 
-        self.attentions = AxialLayers(embedding_dim, 3, 8, 2, 16, 0.1)
+        self.attentions = AxialLayers(embedding_dim, 3, 6, 2, 16, 0.1)
 
         # self.noise_layer = GaussianNoise(0.001)
 

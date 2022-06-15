@@ -68,7 +68,7 @@ class AxialGenerator(nn.Module):
             nn.Tanh(),
         )
 
-        self.attentions = AxialLayers(embedding_dim, 3, 4, 2, 8, 0.1)
+        self.attentions = AxialLayers(embedding_dim, 3, 8, 2, 8, 0.1)
        
        
 

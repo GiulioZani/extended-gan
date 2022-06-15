@@ -21,6 +21,7 @@ class BaseGanLightning(LightningModule):
         self.frame_discriminator = nn.Sequential()
         self.temporal_discriminator = nn.Sequential()
         self.fake_y_detached = t.tensor(0.0)
+        self.l1_loss = nn.L1Loss()
 
     def adversarial_loss(self, y_hat: t.Tensor, y: t.Tensor):
         return F.binary_cross_entropy(y_hat.flatten(), y.flatten()).mean()
@@ -50,9 +51,10 @@ class BaseGanLightning(LightningModule):
             real_temp_label = t.ones(batch_size).to(self.device)
 
             generator_loss = (
-                self.adversarial_loss(pred_temp_label, real_temp_label)
-                + self.adversarial_loss(pred_frame_label, real_frame_label)
-            ) / 2
+                self.adversarial_loss(pred_temp_label, real_temp_label) *0.5
+                + self.adversarial_loss(pred_frame_label, real_frame_label) *0.5
+                + self.l1_loss(fake_y, y).mean() * 0.05
+            ) 
 
             if batch_idx % 50 == 0:
                 visualize_predictions(
