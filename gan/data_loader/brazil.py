@@ -1,4 +1,5 @@
 import os
+from sqlalchemy import false
 import torch as t
 import ipdb
 import matplotlib.pyplot as plt
@@ -19,8 +20,13 @@ class CustomDataModule(LightningDataModule):
         self.in_seq_len = params.in_seq_len
         self.out_seq_len = params.out_seq_len
 
+        # num workers = number of cpus to use
+        # get number of cpu's on this device
+        num_workers = os.cpu_count()
+        self.num_workers = num_workers
+
         self.data = self.load_pytorch_tensor(os.path.join(self.data_location))
-        
+
         # change data type to float
         self.data = self.data.float()
 
@@ -73,14 +79,27 @@ class CustomDataModule(LightningDataModule):
 
     def train_dataloader(self):
         return DataLoader(
-            self.train_data, batch_size=self.train_batch_size, shuffle=True
+            self.train_data,
+            batch_size=self.train_batch_size,
+            shuffle=False,
+            num_workers=self.num_workers,
         )
 
     def test_dataloader(self):
-        return DataLoader(self.test_data, batch_size=self.test_batch_size, shuffle=True)
+        return DataLoader(
+            self.test_data,
+            batch_size=self.test_batch_size,
+            shuffle=False,
+            num_workers=self.num_workers,
+        )
 
     def val_dataloader(self):
-        return DataLoader(self.test_data, batch_size=self.test_batch_size, shuffle=True)
+        return DataLoader(
+            self.test_data,
+            batch_size=self.test_batch_size,
+            shuffle=False,
+            num_workers=self.num_workers,
+        )
 
 
 class CustomDataset(Dataset):
@@ -96,4 +115,6 @@ class CustomDataset(Dataset):
 
     def __getitem__(self, idx):
         # ipdb.set_trace()
-        return self.data[idx, : self.in_seq_len].unsqueeze(1), self.data[idx, self.in_seq_len :].unsqueeze(1)
+        return self.data[idx, : self.in_seq_len].unsqueeze(1), self.data[
+            idx, self.in_seq_len :
+        ].unsqueeze(1)

@@ -88,17 +88,17 @@ class Conv2DAutoEncoder(nn.Module):
             ConvBlock(128, 256, 3, dropout=0.1, padding="same"),
             nn.MaxPool2d(2, 2),
             ConvBlock(256, 512, 3, dropout=0.1, padding="same"),
-            nn.MaxPool2d(2, 2),
+            # nn.MaxPool2d(2, 2),
         )
 
         self.decoder = nn.Sequential(
             ConvBlock(512, 256, 3, dropout=0.1, padding="same"),
-            nn.Upsample(scale_factor=2),
-            ConvBlock(256, 128, 3, dropout=0.1, padding="same"),
-            nn.Upsample(scale_factor=2),
+            nn.ConvTranspose2d(256, 128, 2, 2),
             ConvBlock(128, 64, 3, dropout=0.1, padding="same"),
-            nn.Upsample(scale_factor=2),
-            ConvBlock(64, params.n_channels, 3, dropout=0.1, padding="same"),
+            nn.ConvTranspose2d(64, 32, 2, 2),
+            ConvBlock(32, params.n_channels, 3, dropout=0.1, padding="same"),
+            # nn.Upsample(scale_factor=2),
+            # ConvBlock(64, params.n_channels, 3, dropout=0.1, padding="same"),
         )
 
     def forward(self, x):

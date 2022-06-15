@@ -23,7 +23,7 @@ class BaseGanLightning(LightningModule):
         self.fake_y_detached = t.tensor(0.0)
 
     def adversarial_loss(self, y_hat: t.Tensor, y: t.Tensor):
-        return F.binary_cross_entropy(y_hat.flatten(), y.flatten())
+        return F.binary_cross_entropy(y_hat.flatten(), y.flatten()).mean()
 
     def forward(self, x: t.Tensor):
         return self.generator(x)
@@ -47,23 +47,19 @@ class BaseGanLightning(LightningModule):
             pred_temp_label = self.temporal_discriminator(t.cat((x, fake_y), dim=1))
             real_frame_label = t.ones(batch_size * y_seq_len).to(self.device)
             real_temp_label = t.ones(batch_size).to(self.device)
-            train_mse = F.mse_loss(fake_y.detach(), y)
 
-            generator_loss = self.adversarial_loss(
-                pred_temp_label, real_temp_label
-            ) + self.adversarial_loss(pred_frame_label, real_frame_label) + train_mse * 0.1
-            tqdm_dict = {"g_loss": generator_loss}
-            # not used for backpropagation
+            generator_loss = (
+                self.adversarial_loss(pred_temp_label, real_temp_label)
+                + self.adversarial_loss(pred_frame_label, real_frame_label)
+            ) * 0.5
 
             if batch_idx % 50 == 0:
                 visualize_predictions(x, y, fake_y, self.current_epoch)
 
+            train_mse = F.mse_loss(fake_y, y)
             self.log("train_mse", train_mse, prog_bar=True)
             return {
                 "loss": generator_loss,
-                "progress_bar": tqdm_dict,
-                "log": tqdm_dict,
-                "train_mse": train_mse,
             }
 
         # train frame discriminator
@@ -77,19 +73,16 @@ class BaseGanLightning(LightningModule):
             y_batch_size = batch_size * y_seq_len
             real_label = t.ones(y_batch_size, 1, device=self.device)
             fake_label = t.zeros(y_batch_size, 1, device=self.device)
-            labels = t.cat((real_label, fake_label)).squeeze()
-            frames = t.cat((y_frames, fake_frames))
-            frame_disc_loss = self.adversarial_loss(
-                self.frame_discriminator(frames).squeeze(), labels
-            )
-            self.log('fd_loss', frame_disc_loss, prog_bar=True)
-            tqdm_dict = {"fd_loss": frame_disc_loss}
-            
-            
+            # labels = t.cat((real_label, fake_label)).squeeze()
+            # frames = t.cat((y_frames, fake_frames))
+            frame_disc_loss = (
+                self.adversarial_loss(self.frame_discriminator(fake_frames), fake_label)
+                + self.adversarial_loss(self.frame_discriminator(y_frames), real_label)
+            ) * 0.5
+            self.log("fd_loss", frame_disc_loss, prog_bar=True)
+
             return {
                 "loss": frame_disc_loss,
-                "progress_bar": tqdm_dict,
-                "log": tqdm_dict,
             }
 
         # train temporal discriminator
@@ -99,15 +92,20 @@ class BaseGanLightning(LightningModule):
             labels = t.cat((real_label, fake_label)).squeeze()
             fake_sequence = t.cat((x, self.fake_y_detached), dim=1)
             real_sequence = t.cat((x, y), dim=1)
-            sequences = t.cat((real_sequence, fake_sequence))
-            pred_labels = self.temporal_discriminator(sequences)
-            temp_disc_loss = self.adversarial_loss(pred_labels, labels)
-            tqdm_dict = {"td_loss": temp_disc_loss}
-            self.log('td_loss', temp_disc_loss, prog_bar=True)
+            # sequences = t.cat((real_sequence, fake_sequence))
+            # pred_labels = self.temporal_discriminator(sequences)
+            temp_disc_loss = (
+                self.adversarial_loss(
+                    self.temporal_discriminator(fake_sequence), fake_label
+                )
+                + self.adversarial_loss(
+                    self.temporal_discriminator(real_sequence), real_label
+                )
+            ) * 0.5
+
+            self.log("td_loss", temp_disc_loss, prog_bar=True)
             return {
                 "loss": temp_disc_loss,
-                "progress_bar": tqdm_dict,
-                "log": tqdm_dict,
             }
 
     def training_epoch_end(self, outputs):
