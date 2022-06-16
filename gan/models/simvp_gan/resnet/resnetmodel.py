@@ -544,7 +544,7 @@ class ResNetTemproalDiscriminator(nn.Module):
         ):  # => Don't apply non-linearity on output
             self.input_net = nn.Sequential(
                 nn.Conv2d(
-                    self.params["out_seq_len"] + self.params["in_seq_len"],
+                    self.params.out_seq_len + self.params.in_seq_len,
                     c_hidden[0],
                     kernel_size=3,
                     padding=1,
@@ -554,7 +554,7 @@ class ResNetTemproalDiscriminator(nn.Module):
         else:
             self.input_net = nn.Sequential(
                 nn.Conv2d(
-                    self.params["out_seq_len"] + self.params["in_seq_len"],
+                    self.params.out_seq_len + self.params.in_seq_len,
                     c_hidden[0],
                     kernel_size=3,
                     padding=1,

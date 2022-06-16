@@ -177,7 +177,7 @@ class SimVPTemporalDiscriminator(nn.Module):
         self,
         params,
         shape_in=(10, 1),
-        hid_S=64,
+        hid_S=16,
         hid_T=256,
         N_S=4,
         N_T=8,
@@ -190,10 +190,10 @@ class SimVPTemporalDiscriminator(nn.Module):
         T, C = shape_in
         self.enc = Encoder(C, hid_S, N_S)
         self.hid = Mid_Xnet(T * hid_S, hid_T, N_T, incep_ker, groups)
-        # self.dec = Decoder(hid_S, C, N_S)
+        self.dec = Decoder(hid_S, C, N_S)
 
         self.classifier = nn.Sequential(
-            nn.Flatten(), nn.Linear(64 * 16 * 16, 1), nn.Sigmoid()
+            nn.Flatten(), nn.Linear(params.imsize**2, 1), nn.Sigmoid()
         )
 
     def forward(self, x_raw):
@@ -201,23 +201,17 @@ class SimVPTemporalDiscriminator(nn.Module):
         x = x_raw.view(B * T, C, H, W)
 
         embed, skip = self.enc(x)
-
         _, C_, H_, W_ = embed.shape
 
         z = embed.view(B, T, C_, H_, W_)
         hid = self.hid(z)
 
-        # skip = skip.view(B, T, C_, H_, W_)
-        # ipdb.set_trace()
-
-        max = torch.max(hid, dim=1)[0]
-        # ipdb.set_trace()
-        return self.classifier(max)
+        max = torch.max(hid, dim=1)
+        return self.classifier(max[0])
 
         hid = hid.reshape(B * T, C_, H_, W_)
 
         Y = self.dec(hid, skip)
         Y = Y.reshape(B, T, C, H, W)
-
         Y = torch.tanh(Y)
         return Y

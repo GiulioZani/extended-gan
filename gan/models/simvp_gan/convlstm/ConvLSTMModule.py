@@ -340,7 +340,7 @@ class ConvLSTMClassifier(nn.Module):
         # self.pool = nn.MaxPool3d(kernel_size=(1, 2, 2), stride=(1, 2, 2))
 
         self.classifier = nn.Sequential(
-            nn.Linear(16 * 16, 1),
+            nn.Linear(params.imsize**2 * 32, 1),
             # nn.LeakyReLU(0.2, inplace=True),
             # nn.Linear(512, 256),
             # nn.LeakyReLU(0.2, inplace=True),
@@ -408,7 +408,7 @@ class ConvLSTMClassifier(nn.Module):
 
         # ipdb.set_trace()
         # input_tensor = input_tensor.mean(dim=1)
-        input_tensor = input_tensor.max(dim=1)[0]
+        # input_tensor = input_tensor.max(dim=1)[0]
         input_tensor = input_tensor.view(b, -1)
         output = self.classifier(input_tensor)
         # ipdb.set_trace()

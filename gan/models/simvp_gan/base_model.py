@@ -50,8 +50,9 @@ class BaseGanLightning(LightningModule):
 
             generator_loss = (
                 self.adversarial_loss(pred_temp_label, real_temp_label) 
-                + self.adversarial_loss(pred_frame_label, real_frame_label)
-            ) * 0.5
+                # + self.adversarial_loss(pred_frame_label, real_frame_label)
+                # + F.l1_loss(fake_y, y)
+            ) * 1
 
             if batch_idx % 50 == 0:
                 visualize_predictions(x, y, fake_y, self.current_epoch, self.params.save_path)

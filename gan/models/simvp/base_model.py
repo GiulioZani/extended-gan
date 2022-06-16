@@ -26,7 +26,7 @@ class BaseRegressionModel(LightningModule):
     def training_step(self, batch: tuple[t.Tensor, t.Tensor], batch_idx: int):
         x, y = batch
         y_pred = self(x)
-        loss = self.loss(y_pred, y)
+        loss = self.loss(y_pred, y) + F.l1_loss(y_pred, y)
 
         if batch_idx % 100 == 0:
             visualize_predictions(x, y, y_pred, path=self.params.save_path)

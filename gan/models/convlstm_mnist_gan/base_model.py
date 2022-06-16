@@ -53,7 +53,7 @@ class BaseGanLightning(LightningModule):
             generator_loss = (
                 self.adversarial_loss(pred_temp_label, real_temp_label) *0.5
                 + self.adversarial_loss(pred_frame_label, real_frame_label) *0.5
-                + self.l1_loss(fake_y, y).mean() * 0.05
+                # + self.l1_loss(fake_y, y).mean() * 0.05
             ) 
 
             if batch_idx % 50 == 0:
