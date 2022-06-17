@@ -152,6 +152,7 @@ class BaseGanLightning(LightningModule):
             self.fake_y_detached = fake_y.detach()  # used later by discriminators
 
             if batch_idx % 50 == 0:
+                
                 visualize_predictions(
                     x, y, fake_y, self.current_epoch, self.params.save_path
                 )
@@ -181,7 +182,7 @@ class BaseGanLightning(LightningModule):
             # return {
             #     "loss": temp_disc_loss,
             # }
-
+        
     def training_epoch_end(self, outputs):
         pass
         # avg_loss = t.stack([x[0]["train_mse"] for x in outputs]).mean()

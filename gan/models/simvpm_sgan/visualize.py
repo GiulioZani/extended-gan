@@ -1,9 +1,15 @@
 import os
+import threading
 import torch as t
 import matplotlib.pyplot as plt
 
 def denorm(x):
     return (x + 1) / 2
+
+def run_fun_on_thread(fun, *args, **kwargs):
+    t = threading.Thread(target=fun, args=args, kwargs=kwargs)
+    t.start()
+    return t
 
 def visualize_predictions(
     x: t.Tensor,

@@ -17,7 +17,7 @@
 	"max_epochs": 100,
 	"early_stopping_patience": 5,
 	"reduce_lr_on_plateau_patience": 5,
-	"data_location": "./datasets/brazil_data.pt",
+	"data_location":  "./datasets/brazil_data.pt",
 	"crop":64,
 	"data_loader":"brazil"
 }

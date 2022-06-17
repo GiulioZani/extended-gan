@@ -61,6 +61,7 @@ class BaseGanLightning(LightningModule):
             self.log("train_mse", train_mse, prog_bar=True)
             return {
                 "loss": generator_loss,
+                "train_mse": train_mse,
             }
 
         # train frame discriminator

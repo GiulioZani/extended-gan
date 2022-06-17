@@ -1,11 +1,24 @@
 import os
+import threading
 import torch as t
 import matplotlib.pyplot as plt
+
 
 def denorm(x):
     return (x + 1) / 2
 
-def visualize_predictions(
+
+def run_on_thread(func, *args, **kwargs):
+    t = threading.Thread(target=func, args=args, kwargs=kwargs)
+    t.start()
+    return t
+
+
+def visualize_predictions(*args, **kwargs):
+    run_on_thread(_visualize_predictions, *args, **kwargs)
+
+
+def _visualize_predictions(
     x: t.Tensor,
     y: t.Tensor,
     preds: t.Tensor,
@@ -14,7 +27,11 @@ def visualize_predictions(
 ):
     if not os.path.exists(path):
         os.mkdir(path)
-    to_plot = [denorm(x[0].squeeze(1)), denorm(y[0].squeeze(1)), denorm(preds[0].squeeze(1))]
+    to_plot = [
+        denorm(x[0].squeeze(1)),
+        denorm(y[0].squeeze(1)),
+        denorm(preds[0].squeeze(1)),
+    ]
     _, ax = plt.subplots(nrows=len(to_plot), ncols=to_plot[0].shape[0])
     plt.suptitle(f"Epoch {epoch}")
     for i, row in enumerate(ax):

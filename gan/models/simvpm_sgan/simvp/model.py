@@ -134,6 +134,18 @@ class Mid_Xnet(nn.Module):
         return y
 
 
+class GaussianNoise(nn.Module):
+    def __init__(self, std):
+        super(GaussianNoise, self).__init__()
+        self.std = std
+
+    def forward(self, x):
+        if self.training:
+            return x + (2 * torch.randn(x.size(), device=x.device) - 1) * self.std
+        else:
+            return x
+
+
 class SimVP(nn.Module):
     def __init__(
         self,
@@ -148,14 +160,22 @@ class SimVP(nn.Module):
     ):
         super(SimVP, self).__init__()
         self.params = params
-        shape_in = (params.in_seq_len, params.n_channels)
+        shape_in = (params.in_seq_len, params.n_channels )
         T, C = shape_in
         self.enc = Encoder(C, hid_S, N_S)
         self.hid = Mid_Xnet(T * hid_S, hid_T, N_T, incep_ker, groups)
-        self.dec = Decoder(hid_S, C, N_S)
+        self.dec = Decoder(hid_S, C , N_S)
+        self.noise = GaussianNoise(0.1)
 
     def forward(self, x_raw):
+
+        # rand_noise = torch.randn(x_raw.shape, device=x_raw.device)
+        # x_raw = torch.cat([x_raw, rand_noise], dim=2)
+
         B, T, C, H, W = x_raw.shape
+
+        x_raw = self.noise(x_raw)
+
         x = x_raw.view(B * T, C, H, W)
 
         embed, skip = self.enc(x)
@@ -167,7 +187,7 @@ class SimVP(nn.Module):
         hid = hid.reshape(B * T, C_, H_, W_)
 
         Y = self.dec(hid, skip)
-        Y = Y.reshape(B, T, C, H, W)
+        Y = Y.reshape(B, T, C , H, W)
         Y = torch.tanh(Y)
         return Y
 
@@ -190,7 +210,7 @@ class SimVPTemporalDiscriminator(nn.Module):
         T, C = shape_in
         self.enc = Encoder(C, hid_S, N_S)
         self.hid = Mid_Xnet(T * hid_S, hid_T, N_T, incep_ker, groups)
-        self.dec = Decoder(hid_S, C, N_S)
+        # self.dec = Decoder(hid_S, C, N_S)
 
         self.classifier = nn.Sequential(
             nn.Flatten(), nn.Linear(params.imsize**2, 1), nn.Sigmoid()
