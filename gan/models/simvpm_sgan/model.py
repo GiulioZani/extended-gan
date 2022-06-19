@@ -14,6 +14,6 @@ class Model(BaseGanLightning):
         super().__init__(params)
         self.generator = SimVP(params)
         self.frame_discriminator = ResNetFrameDiscriminator(params)
-        self.temporal_discriminator = ResNet3DClassifier(
-            params, block_inplanes=(64, 64, 64, 256)
+        self.temporal_discriminator = ResNetTemproalDiscriminator(
+            params, [4, 4, 4, 4], [64, 128, 256, 512]
         )

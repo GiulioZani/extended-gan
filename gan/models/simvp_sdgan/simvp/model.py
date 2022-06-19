@@ -1,7 +1,5 @@
 import torch
 from torch import nn
-
-from gan.models.simvp_dgan.conv2d.conv2dmodel import GaussianNoise
 from .modules import ConvSC, Inception
 import ipdb
 
@@ -143,7 +141,7 @@ class GaussianNoise(nn.Module):
 
     def forward(self, x):
         if self.training:
-            return x + (2 * torch.randn_like(x) - 1) * self.std
+            return x + (2 * torch.randn(x.size(), device=x.device) - 1) * self.std
         else:
             return x
 
@@ -153,25 +151,31 @@ class SimVP(nn.Module):
         self,
         params,
         shape_in=(10, 1),
-        hid_S=64,
+        hid_S=16,
         hid_T=256,
         N_S=4,
-        N_T=32,
+        N_T=8,
         incep_ker=[3, 5, 7, 11],
         groups=8,
     ):
         super(SimVP, self).__init__()
         self.params = params
-        shape_in = (params.in_seq_len, params.n_channels)
+        shape_in = (params.in_seq_len, params.n_channels )
         T, C = shape_in
         self.enc = Encoder(C, hid_S, N_S)
         self.hid = Mid_Xnet(T * hid_S, hid_T, N_T, incep_ker, groups)
-        self.dec = Decoder(hid_S, C, N_S)
+        self.dec = Decoder(hid_S, C , N_S)
         self.noise = GaussianNoise(0.1)
 
     def forward(self, x_raw):
+
+        # rand_noise = torch.randn(x_raw.shape, device=x_raw.device)
+        # x_raw = torch.cat([x_raw, rand_noise], dim=2)
+
         B, T, C, H, W = x_raw.shape
+
         x_raw = self.noise(x_raw)
+
         x = x_raw.view(B * T, C, H, W)
 
         embed, skip = self.enc(x)
@@ -183,7 +187,7 @@ class SimVP(nn.Module):
         hid = hid.reshape(B * T, C_, H_, W_)
 
         Y = self.dec(hid, skip)
-        Y = Y.reshape(B, T, C, H, W)
+        Y = Y.reshape(B, T, C , H, W)
         Y = torch.tanh(Y)
         return Y
 
@@ -206,7 +210,7 @@ class SimVPTemporalDiscriminator(nn.Module):
         T, C = shape_in
         self.enc = Encoder(C, hid_S, N_S)
         self.hid = Mid_Xnet(T * hid_S, hid_T, N_T, incep_ker, groups)
-        self.dec = Decoder(hid_S, C, N_S)
+        # self.dec = Decoder(hid_S, C, N_S)
 
         self.classifier = nn.Sequential(
             nn.Flatten(), nn.Linear(params.imsize**2, 1), nn.Sigmoid()

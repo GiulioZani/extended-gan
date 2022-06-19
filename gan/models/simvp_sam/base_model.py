@@ -72,7 +72,7 @@ class BaseRegressionModel(LightningModule):
         self.log("val_loss", avg_loss, prog_bar=True)
         t.save(
             self.state_dict(),
-            os.path.join(self.params.save_path, "checkpoint.ckpt"),
+            os.path.join(self.params.save_path, "model.pt"),
         )
 
         self.lr_scheduler_step(self.lr_schedulers(), 0, avg_loss)
@@ -112,7 +112,7 @@ class BaseRegressionModel(LightningModule):
 
         base_optimizer = t.optim.SGD
         generator_optimizer = SAM(
-            self.generator.parameters(), t.optim.SGD, lr=0.001, momentum=0.9
+            self.generator.parameters(), t.optim.SGD, lr=0.0001, momentum=0.9
         )
 
         generator_scheduler = t.optim.lr_scheduler.ReduceLROnPlateau(

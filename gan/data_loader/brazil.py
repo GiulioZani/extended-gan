@@ -43,7 +43,7 @@ class CustomDataModule(LightningDataModule):
         # change data type to float
         self.data = self.data.float()
         self.data = self.segment_data(self.data)
-        self.data = self.threshold_data(self.data, 1000)
+        self.data = self.threshold_data(self.data, 5000)
 
         # normalize data with min-max normalization and scale to -1 to 1
         self.data = (

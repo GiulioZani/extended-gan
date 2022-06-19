@@ -3,7 +3,7 @@
 	"cuda": true,
 	"train_batch_size": 4,
 	"test_batch_size": 10,
-	"imsize": 64, 
+	"imsize": 40, 
 	"n_channels": 1,  
 	"ngf": 64,
 	"ndf": 32,
@@ -17,7 +17,7 @@
 	"max_epochs": 100,
 	"early_stopping_patience": 5,
 	"reduce_lr_on_plateau_patience": 5,
-	"data_location": "./datasets/moving-mnist/",
+	"data_location": "./datasets/brazil_data.pt",
 	"crop":64,
-	"data_loader":"moving_mnist"
+	"data_loader":"brazil"
 }

@@ -5,10 +5,87 @@ import torch.nn.functional as F
 from argparse import Namespace
 from torchmetrics import Accuracy
 import torch.nn as nn
+import torchmetrics
 from .visualize import visualize_predictions
 import matplotlib.pyplot as plt
 import ipdb
 import os
+
+
+class MetricTracker:
+    def __init__(self, key="train", *args, **kwargs):
+
+        self.key = key
+        self.metrics = {
+            "MSE": torchmetrics.MeanSquaredError(),
+            "MAE": torchmetrics.MeanAbsoluteError(),
+            "CosineSimilarity": torchmetrics.CosineSimilarity(),
+            "MAEPercentageError": torchmetrics.MeanAbsolutePercentageError(),
+        }
+
+    def get_metrics(self):
+        return {
+            metric_name: metric.compute()
+            for metric_name, metric in self.metrics.items()
+        }
+
+    def update(self, output, target):
+
+        # set both devices to same
+        output = output
+        target = target
+
+        # ipdb.set_trace()
+        for metric in self.metrics.values():
+            metric.update(output.detach().cpu(), target.detach().cpu())
+
+    def reset(self):
+        for metric in self.metrics.values():
+            metric.reset()
+
+    def log_iter(self, logfn):
+
+        for metric_name, metric in self.metrics.items():
+            # print("add scalar", metric_name, metric.compute().detach())
+            logfn(f"{self.key}/{metric_name}", metric.compute().detach())
+
+        # logger.experiment.s
+
+    def log(self, logger, epoch):
+        for metric_name, metric in self.metrics.items():
+            if metric_name == "Confusion Matrix":
+                self.save_confusion_matrix(
+                    logger, metric.compute().detach().numpy(), epoch
+                )
+
+            else:
+                logger.experiment.add_scalar(
+                    f"{self.key}_{metric_name}/epoch", metric.compute().detach(), epoch
+                )
+            metric.reset()
+
+
+class DiscriminatorMetricTracker(MetricTracker):
+    def __init__(self, key=["fd", "td", "td2"], *args, **kwargs):
+
+        self.key = key
+        self.metrics = {key[i]: torchmetrics.Accuracy() for i in range(len(key))}
+
+    def update(self, key, output, target):
+
+        # set both devices to same
+        output = output
+        target = target
+        self.metrics[key].update(output.detach().cpu(), target.detach().cpu())
+
+    def reset(self):
+        for metric in self.metrics.values():
+            metric.reset()
+
+    def log(self, logfn):
+
+        mapped = {key: metric.compute() for key, metric in self.metrics.items()}
+        logfn("Accuracy", mapped)
 
 
 class BaseGanLightning(LightningModule):
@@ -16,6 +93,9 @@ class BaseGanLightning(LightningModule):
         super().__init__()
         self.params = params
         self.save_hyperparameters()
+
+        self.train_metrics = MetricTracker(key="train")
+        self.val_metrics = MetricTracker(key="val")
 
         self.generator = nn.Sequential()
         self.frame_discriminator = nn.Sequential()
@@ -32,6 +112,13 @@ class BaseGanLightning(LightningModule):
     def training_step(
         self, batch: tuple[t.Tensor, t.Tensor], batch_idx: int, optimizer_idx: int
     ):
+
+        if batch_idx % self.params.save_interval == 0:
+            t.save(
+                self.state_dict(),
+                os.path.join(self.params.save_path, "model.pt"),
+            )
+
         x, y = batch
         batch_size, x_seq_len, channels, height, width = x.shape
         batch_size, y_seq_len, channels, height, width = y.shape
@@ -59,13 +146,31 @@ class BaseGanLightning(LightningModule):
                 # + F.l1_loss(fake_y, y)
             ) * 0.33
 
-            if batch_idx % 50 == 0:
+            if batch_idx % 100 == 0:
                 visualize_predictions(
                     x, y, fake_y, self.current_epoch, self.params.save_path
                 )
+                # self.train_metrics.log(self.logger, self.current_epoch)
 
             train_mse = F.mse_loss(fake_y, y)
-            self.log("train_mse", train_mse, prog_bar=True)
+            self.log("Loss/MSE", train_mse, prog_bar=True)
+            self.log("Loss/Generator", generator_loss, prog_bar=True)
+
+            self.log(
+                "Loss/all",
+                {
+                    "MSE": train_mse,
+                    "Generator": generator_loss,
+                },
+            )
+            self.train_metrics.update(fake_y, y)
+
+            # dataset size
+
+            if batch_idx % 100 == 0:
+
+                self.train_metrics.log_iter(self.log)
+
             return {
                 "loss": generator_loss,
                 "train_mse": train_mse,
@@ -82,14 +187,14 @@ class BaseGanLightning(LightningModule):
             y_batch_size = batch_size * y_seq_len
             real_label = t.ones(y_batch_size, 1, device=self.device)
             fake_label = t.zeros(y_batch_size, 1, device=self.device)
-            # labels = t.cat((real_label, fake_label)).squeeze()
-            # frames = t.cat((y_frames, fake_frames))
+
             frame_disc_loss = (
                 self.adversarial_loss(self.frame_discriminator(fake_frames), fake_label)
                 + self.adversarial_loss(self.frame_discriminator(y_frames), real_label)
             ) * 0.5
-            self.log("fd_loss", frame_disc_loss, prog_bar=True)
+            self.log("Loss/frame_discriminator", frame_disc_loss, prog_bar=True)
 
+            # self.log("Loss/all", {"frame_discriminator": frame_disc_loss})
             return {
                 "loss": frame_disc_loss,
             }
@@ -101,8 +206,7 @@ class BaseGanLightning(LightningModule):
             labels = t.cat((real_label, fake_label)).squeeze()
             fake_sequence = t.cat((x, self.fake_y_detached), dim=1)
             real_sequence = t.cat((x, y), dim=1)
-            # sequences = t.cat((real_sequence, fake_sequence))
-            # pred_labels = self.temporal_discriminator(sequences)
+
             temp_disc_loss = (
                 self.adversarial_loss(
                     self.temporal_discriminator(fake_sequence), fake_label
@@ -112,7 +216,8 @@ class BaseGanLightning(LightningModule):
                 )
             ) * 0.5
 
-            self.log("td_loss", temp_disc_loss, prog_bar=True)
+            self.log("Loss/TD", temp_disc_loss, prog_bar=True)
+            # self.log("Loss/all", {"TD": temp_disc_loss})
             return {
                 "loss": temp_disc_loss,
             }
@@ -134,12 +239,14 @@ class BaseGanLightning(LightningModule):
                 )
             ) * 0.5
 
-            self.log("td_2_loss", temp_disc_loss, prog_bar=True)
+            self.log("Loss/TD2", temp_disc_loss, prog_bar=True)
+            # self.log("Loss/all", {"TD2": temp_disc_loss})
             return {
                 "loss": temp_disc_loss,
             }
 
     def training_epoch_end(self, outputs):
+        self.train_metrics.reset()
         # save model to params.save_path
 
         # t.save(
@@ -170,9 +277,9 @@ class BaseGanLightning(LightningModule):
         self.log("val_loss", avg_loss, prog_bar=True)
         t.save(
             self.state_dict(),
-            os.path.join(self.params.save_path, "checkpoint.ckpt"),
+            os.path.join(self.params.save_path, "model_val.pt"),
         )
-        return {"val_mse": avg_loss}
+        return {"val_loss": avg_loss}
 
     def configure_optimizers(self):
         lr = self.params.lr

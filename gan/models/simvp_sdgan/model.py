@@ -7,7 +7,6 @@ from .resnet.resnet3d import ResNet3DClassifier
 from .resnet.resnetmodel import ResNetFrameDiscriminator, ResNetTemproalDiscriminator
 from .simvp.model import SimVP, SimVPTemporalDiscriminator
 from .axial.axial import AxialDiscriminator
-from .vit.cct import CCT
 
 
 class Model(BaseGanLightning):
@@ -18,6 +17,6 @@ class Model(BaseGanLightning):
         self.temporal_discriminator = ResNetTemproalDiscriminator(
             params, [4, 4, 4, 4], [64, 128, 256, 512]
         )
-        self.second_temporal_discriminator = ResNetTemproalDiscriminator(
-            params, [6, 6, 6, 6], [32, 64, 128, 256]
+        self.second_temporal_discriminator = ResNet3DClassifier(
+            params, block_inplanes=(32, 64, 128, 256)
         )

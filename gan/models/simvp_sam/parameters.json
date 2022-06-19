@@ -18,7 +18,7 @@
 	"early_stopping_patience": 20,
 	"reduce_lr_on_plateau_patience": 0,
 	"reduce_lr_on_plateau_factor": 0.5,
-	"data_location": "./datasets/moving-mnist/",
+	"data_location": "./datasets/brazil_data.pt",
 	"crop": 64,
-	"data_loader": "moving_mnist"
+	"data_loader": "brazil"
 }

@@ -21,6 +21,7 @@ class BaseGanLightning(LightningModule):
         self.generator = nn.Sequential()
         self.frame_discriminator = nn.Sequential()
         self.temporal_discriminator = nn.Sequential()
+        self.second_temporal_discriminator = nn.Sequential()
         self.fake_y_detached = t.tensor(0.0)
         self.automatic_optimization = False
 
@@ -47,7 +48,11 @@ class BaseGanLightning(LightningModule):
         generator_loss = (
             self.adversarial_loss(pred_temp_label, real_temp_label)
             + self.adversarial_loss(pred_frame_label, real_frame_label)
-        ) * 0.5
+            + self.adversarial_loss(
+                self.second_temporal_discriminator(t.cat((x, fake_y), dim=1)),
+                real_temp_label,
+            )
+        ) * 0.33
 
         return generator_loss
 
@@ -85,7 +90,7 @@ class BaseGanLightning(LightningModule):
         optimizer.second_step(zero_grad=True)
         return loss_2
 
-    def temporal_discriminator_loss(self, batch):
+    def temporal_discriminator_loss(self, discriminator, batch):
 
         x, y = batch
         batch_size, x_seq_len, channels, height, width = x.shape
@@ -98,12 +103,8 @@ class BaseGanLightning(LightningModule):
         real_sequence = t.cat((x, y), dim=1)
 
         temp_disc_loss = (
-            self.adversarial_loss(
-                self.temporal_discriminator(fake_sequence), fake_label
-            )
-            + self.adversarial_loss(
-                self.temporal_discriminator(real_sequence), real_label
-            )
+            self.adversarial_loss(discriminator(fake_sequence), fake_label)
+            + self.adversarial_loss(discriminator(real_sequence), real_label)
         ) * 0.5
         return temp_disc_loss
 
@@ -128,20 +129,21 @@ class BaseGanLightning(LightningModule):
         )
         return {"val_loss": avg_loss}
 
+    def temporal_discriminator_optimizer(
+        self, optimizer_id, temporal_discriminator, batch
+    ):
+        optimizer = self.optimizers()[optimizer_id]
 
-    def temporal_discriminator_optimizer(self, batch):
-        optimizer = self.optimizers()[2]
-
-        enable_running_stats(self.temporal_discriminator)
-        loss_1 = self.temporal_discriminator_loss(batch)
+        enable_running_stats(temporal_discriminator)
+        loss_1 = self.temporal_discriminator_loss(temporal_discriminator, batch)
         self.manual_backward(loss_1)
         optimizer.first_step(zero_grad=True)
 
-        disable_running_stats(self.temporal_discriminator)
-        loss_2 = self.temporal_discriminator_loss(batch)
+        disable_running_stats(temporal_discriminator)
+        loss_2 = self.temporal_discriminator_loss(temporal_discriminator, batch)
         self.manual_backward(loss_2)
         optimizer.second_step(zero_grad=True)
-        return loss_2
+        return loss_1
 
     def gen_sam_optimizer(self, batch):
         optimizer = self.optimizers()[0]
@@ -155,7 +157,7 @@ class BaseGanLightning(LightningModule):
         loss_2 = self.generator_loss(batch)
         self.manual_backward(loss_2)
         optimizer.second_step(zero_grad=True)
-        return loss_2
+        return loss_1
 
     def forward(self, x: t.Tensor):
         return self.generator(x)
@@ -174,7 +176,6 @@ class BaseGanLightning(LightningModule):
             self.fake_y_detached = fake_y.detach()  # used later by discriminators
 
             if batch_idx % 50 == 0:
-                
                 visualize_predictions(
                     x, y, fake_y, self.current_epoch, self.params.save_path
                 )
@@ -199,12 +200,28 @@ class BaseGanLightning(LightningModule):
         # train temporal discriminator
         optimizer_idx = 2
         if optimizer_idx == 2:
-            temp_disc_loss = self.temporal_discriminator_optimizer(batch)
+            temp_disc_loss = self.temporal_discriminator_optimizer(
+                2, self.temporal_discriminator, batch
+            )
             self.log("td_loss", temp_disc_loss, prog_bar=True)
             # return {
             #     "loss": temp_disc_loss,
             # }
+
+        optimizer_idx = 3
+        if optimizer_idx == 3:
+            td2_loss = self.temporal_discriminator_optimizer(
+                3, self.second_temporal_discriminator, batch
+            )
+            self.log("td2_loss", td2_loss, prog_bar=True)
+
         
+        if batch_idx % self.params.save_interval == 0:
+            t.save(
+                self.state_dict(),
+                os.path.join(self.params.save_path, "model.pt"),
+            )
+
     def training_epoch_end(self, outputs):
         pass
         # avg_loss = t.stack([x[0]["train_mse"] for x in outputs]).mean()
@@ -220,23 +237,33 @@ class BaseGanLightning(LightningModule):
         b2 = self.params.b2
 
         generator_optimizer = SAM(
-            self.generator.parameters(), t.optim.SGD, lr=0.001, momentum=0.9
+            self.generator.parameters(), t.optim.SGD, lr=lr, momentum=0.4
         )
 
         # generator_optimizer = t.optim.Adam(
         #     self.generator.parameters(), lr=lr, betas=(b1, b2)
         # )
         frame_discriminator_optimizer = SAM(
-            self.frame_discriminator.parameters(), t.optim.SGD, lr=0.001, momentum=0.9
+            self.frame_discriminator.parameters(), t.optim.SGD, lr=lr, momentum=0.9
         )
         temporal_discriminator_optimizer = SAM(
-            self.temporal_discriminator.parameters(), t.optim.SGD, lr=0.001, momentum=0.9
+            self.temporal_discriminator.parameters(),
+            t.optim.SGD,
+            lr=lr,
+            momentum=0.4,
+        )
+        second_temporal_discriminator_optimizer = SAM(
+            self.second_temporal_discriminator.parameters(),
+            t.optim.SGD,
+            lr=lr,
+            momentum=0.9,
         )
         return (
             [
                 generator_optimizer,
                 frame_discriminator_optimizer,
                 temporal_discriminator_optimizer,
+                second_temporal_discriminator_optimizer,
             ],
             [],
         )
