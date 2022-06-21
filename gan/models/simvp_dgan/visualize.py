@@ -50,6 +50,14 @@ def _visualize_predictions(
         ax_.set_title(col)
 
     save_path = os.path.join(path, f"pred_{epoch}.png")
+    
+    # remove numbers from axis
+    for ax_ in ax.flat:
+        ax_.xaxis.set_ticklabels([])
+        ax_.yaxis.set_ticklabels([])
+
+    
+
     plt.savefig(save_path)
     # plt.show()
     plt.close()

@@ -18,6 +18,4 @@ class Model(BaseGanLightning):
         self.temporal_discriminator = ResNetTemproalDiscriminator(
             params, [4, 4, 4, 4], [64, 128, 256, 512]
         )
-        self.second_temporal_discriminator = ResNetTemproalDiscriminator(
-            params, [6, 6, 6, 6], [32, 64, 128, 256]
-        )
+        self.second_temporal_discriminator = ResNet3DClassifier(params, block_inplanes=(32, 64, 128, 256))

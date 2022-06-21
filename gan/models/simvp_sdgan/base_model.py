@@ -79,16 +79,25 @@ class BaseGanLightning(LightningModule):
     def frame_discriminator_optimizer(self, batch):
         optimizer = self.optimizers()[1]
 
-        enable_running_stats(self.frame_discriminator)
-        loss_1 = self.frame_discriminator_loss(batch)
-        self.manual_backward(loss_1)
-        optimizer.first_step(zero_grad=True)
+        # enable_running_stats(self.frame_discriminator)
+        # zero grad
+        optimizer.zero_grad()
+        # compute loss
+        loss = self.frame_discriminator_loss(batch)
+        # compute gradients
+        loss.backward()
+        # update weights
+        optimizer.step()
 
-        disable_running_stats(self.frame_discriminator)
-        loss_2 = self.frame_discriminator_loss(batch)
-        self.manual_backward(loss_2)
-        optimizer.second_step(zero_grad=True)
-        return loss_2
+        # loss_1 = self.frame_discriminator_loss(batch)
+        # self.manual_backward(loss_1)
+        # optimizer.first_step(zero_grad=True)
+
+        # disable_running_stats(self.frame_discriminator)
+        # loss_2 = self.frame_discriminator_loss(batch)
+        # self.manual_backward(loss_2)
+        # optimizer.second_step(zero_grad=True)
+        return loss
 
     def temporal_discriminator_loss(self, discriminator, batch):
 
@@ -134,6 +143,13 @@ class BaseGanLightning(LightningModule):
     ):
         optimizer = self.optimizers()[optimizer_id]
 
+        # if optimizer_id == 2:
+        #     optimizer.zero_grad()
+        #     loss = self.temporal_discriminator_loss(temporal_discriminator, batch)
+        #     loss.backward()
+        #     optimizer.step()
+        #     return loss
+
         enable_running_stats(temporal_discriminator)
         loss_1 = self.temporal_discriminator_loss(temporal_discriminator, batch)
         self.manual_backward(loss_1)
@@ -149,6 +165,18 @@ class BaseGanLightning(LightningModule):
         optimizer = self.optimizers()[0]
 
         enable_running_stats(self.generator)
+        loss_1 = F.mse_loss(self.generator(batch[0]), batch[1])
+        self.manual_backward(loss_1)
+        optimizer.first_step(zero_grad=True)
+
+        disable_running_stats(self.generator)
+        loss_2 = F.mse_loss(self.generator(batch[0]), batch[1])
+        self.manual_backward(loss_2)
+        optimizer.second_step(zero_grad=True)
+
+        
+
+        enable_running_stats(self.generator)
         loss_1 = self.generator_loss(batch)
         self.manual_backward(loss_1)
         optimizer.first_step(zero_grad=True)
@@ -157,6 +185,7 @@ class BaseGanLightning(LightningModule):
         loss_2 = self.generator_loss(batch)
         self.manual_backward(loss_2)
         optimizer.second_step(zero_grad=True)
+
         return loss_1
 
     def forward(self, x: t.Tensor):
@@ -182,6 +211,7 @@ class BaseGanLightning(LightningModule):
 
             train_mse = F.mse_loss(fake_y, y)
             self.log("train_mse", train_mse, prog_bar=True)
+            self.log("train_loss", generator_loss, prog_bar=True)
             # return {
             #     "loss": generator_loss,
             # }
@@ -215,7 +245,6 @@ class BaseGanLightning(LightningModule):
             )
             self.log("td2_loss", td2_loss, prog_bar=True)
 
-        
         if batch_idx % self.params.save_interval == 0:
             t.save(
                 self.state_dict(),
@@ -237,20 +266,23 @@ class BaseGanLightning(LightningModule):
         b2 = self.params.b2
 
         generator_optimizer = SAM(
-            self.generator.parameters(), t.optim.SGD, lr=lr, momentum=0.4
+            self.generator.parameters(), t.optim.SGD, lr=lr, momentum=0.9
         )
 
         # generator_optimizer = t.optim.Adam(
         #     self.generator.parameters(), lr=lr, betas=(b1, b2)
         # )
-        frame_discriminator_optimizer = SAM(
-            self.frame_discriminator.parameters(), t.optim.SGD, lr=lr, momentum=0.9
+        frame_discriminator_optimizer = t.optim.Adam(
+            self.frame_discriminator.parameters(), lr=lr, betas=(b1, b2)
         )
+        #  SAM(
+        #     self.frame_discriminator.parameters(), t.optim.SGD, lr=lr, momentum=0.9
+        # )
         temporal_discriminator_optimizer = SAM(
-            self.temporal_discriminator.parameters(),
+            self.second_temporal_discriminator.parameters(),
             t.optim.SGD,
             lr=lr,
-            momentum=0.4,
+            momentum=0.9,
         )
         second_temporal_discriminator_optimizer = SAM(
             self.second_temporal_discriminator.parameters(),

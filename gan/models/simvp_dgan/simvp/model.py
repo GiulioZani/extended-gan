@@ -1,8 +1,7 @@
 import torch
 from torch import nn
 
-from gan.models.simvp_dgan.conv2d.conv2dmodel import GaussianNoise
-from .modules import ConvSC, Inception
+from .modules import AxialLayers, ConvSC, Inception
 import ipdb
 
 
@@ -148,15 +147,18 @@ class GaussianNoise(nn.Module):
             return x
 
 
+from axial_attention import AxialAttention, AxialPositionalEmbedding
+
+
 class SimVP(nn.Module):
     def __init__(
         self,
         params,
         shape_in=(10, 1),
-        hid_S=64,
+        hid_S=16,
         hid_T=256,
         N_S=4,
-        N_T=32,
+        N_T=8,
         incep_ker=[3, 5, 7, 11],
         groups=8,
     ):
@@ -166,6 +168,19 @@ class SimVP(nn.Module):
         T, C = shape_in
         self.enc = Encoder(C, hid_S, N_S)
         self.hid = Mid_Xnet(T * hid_S, hid_T, N_T, incep_ker, groups)
+
+        # self.pos_emb = AxialPositionalEmbedding(hid_S, (10, 10, 10), 2)
+        # self.embedding_encoder = nn.Sequential(nn.Conv2d(hid_S, hid_S, 1), nn.ReLU())
+        # self.embedding_decoder = nn.Conv2d(hid_S, hid_S, 1)
+
+        # self.attn = AxialLayers(hid_S, 3, 8,2,8,0.6)
+        # nn.Sequential(
+        #     AxialAttention(hid_S, 3, dim_index=2),
+        #     AxialAttention(hid_S, 3, dim_index=2),
+        #     AxialAttention(hid_S, 3, dim_index=2),
+        #     AxialAttention(hid_S, 3, dim_index=2),
+        # )
+
         self.dec = Decoder(hid_S, C, N_S)
         self.noise = GaussianNoise(0.1)
 
@@ -177,7 +192,12 @@ class SimVP(nn.Module):
         embed, skip = self.enc(x)
         _, C_, H_, W_ = embed.shape
 
+        # embed = self.embedding_encoder(embed)
+
         z = embed.view(B, T, C_, H_, W_)
+        # z = self.pos_emb(z)
+        # ipdb.set_trace()
+        # hid = self.attn(z)  # + self.hid(z)
         hid = self.hid(z)
 
         hid = hid.reshape(B * T, C_, H_, W_)

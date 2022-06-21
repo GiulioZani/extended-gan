@@ -1,5 +1,5 @@
 from torch import nn
-
+from axial_attention import AxialAttention, AxialPositionalEmbedding
 
 class BasicConv2d(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size, stride, padding, transpose=False, act_norm=False):
@@ -64,3 +64,53 @@ class Inception(nn.Module):
         for layer in self.layers:
             y += layer(x)
         return y
+
+class AxialLayers(nn.Module):
+    def __init__(
+        self,
+        embedding_dim=8,
+        num_dimentions=3,
+        num_layers=4,
+        embedding_idx=2,
+        num_heads=8,
+        dropout=0.00,
+    ):
+        super().__init__()
+
+        self.embedding_dim = embedding_dim
+        self.embedding_idx = embedding_idx
+        self.num_heads = num_heads
+        self.num_layers = num_layers
+        self.dropout = dropout
+
+        self.attentions = nn.Sequential()
+        for i in range(self.num_layers):
+            # we need setattr so that lightning can find the module
+            self.__setattr__(
+                "layer_{}".format(i),
+                AxialAttention(
+                    self.embedding_dim,
+                    num_dimentions,
+                    self.num_heads,
+                    4,
+                    embedding_idx,
+                    True,
+                ),
+            )
+            self.attentions.add_module(
+                "layer_{}".format(i), self.__getattr__("layer_{}".format(i))
+            )
+            
+            if i != self.num_layers - 1:
+                self.do = nn.Dropout(self.dropout)
+                self.attentions.add_module(f"do_{i}", self.do)
+
+
+        
+
+    def forward(self, x):
+        z = self.attentions(x)
+        out = z # + x
+        # out = F.relu(out)
+        # out = self.do(out)
+        return out
