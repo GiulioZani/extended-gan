@@ -5,11 +5,101 @@ import torch.nn.functional as F
 from argparse import Namespace
 from torchmetrics import Accuracy
 import torch.nn as nn
+import torchmetrics
 from .visualize import visualize_predictions
 import matplotlib.pyplot as plt
 import ipdb
 import os
 from .sam import SAM, disable_running_stats, enable_running_stats
+
+
+class BaseMetricTracker:
+    def __init__(self, metric_names):
+        self.metric_names = metric_names
+        # self.metrics = {
+        #     "MSE": torchmetrics.MeanSquaredError(),
+        #     "MAE": torchmetrics.MeanAbsoluteError(),
+        # }
+        self.frame_metics = [
+            {
+                f"MSE_{i}": torchmetrics.MeanSquaredError(False),
+                f"MAE_{i}": torchmetrics.MeanAbsoluteError(False),
+            }
+            for i in range(10)
+        ]
+        self.frame_metics.append(
+            {
+                f"MSE": torchmetrics.MeanSquaredError(),
+                f"MAE": torchmetrics.MeanAbsoluteError(),
+            }
+        )
+
+    def update(self, y_hat, y):
+        # for metric_name in self.metrics.keys():
+        #     self.metrics[metric_name].update(y_hat, y)
+
+        for i in range(10):
+            self.frame_metics[i][f"MSE_{i}"].update(
+                y_hat[:, i, ...].detach().cpu(), y[:, i, ...].detach().cpu()
+            )
+            self.frame_metics[i][f"MAE_{i}"].update(
+                y_hat[:, i, ...].detach().cpu(), y[:, i, ...].detach().cpu()
+            )
+        self.frame_metics[10]["MSE"].update(y_hat.detach().cpu(), y.detach().cpu())
+        self.frame_metics[10]["MAE"].update(y_hat.detach().cpu(), y.detach().cpu())
+
+    def get_metrics(self):
+
+        # metrics = {
+        #     metric_name: self.metrics[metric_name].compute()
+        #     for metric_name in self.metric_names.keys()
+        # }
+        metrics = {}
+        for i in range(10):
+            metrics[f"MSE_{i}"] = self.frame_metics[i][f"MSE_{i}"].compute()
+            metrics[f"MAE_{i}"] = self.frame_metics[i][f"MAE_{i}"].compute()
+
+        metrics["MSE"] = self.frame_metics[10]["MSE"].compute()
+        metrics["MAE"] = self.frame_metics[10]["MAE"].compute()
+
+        self.print_metrics_latex(metrics)
+        return metrics
+
+    # tabular latex format
+    def print_latex_matrix(self, column_labels, values):
+
+        print("\begin{tabular}{|l|", end="")
+        for i in range(len(column_labels)):
+            print("c|", end="")
+        print("}")
+        print(" \hline\n", end="")
+        for i in range(len(column_labels)):
+            print("&", end="")
+            print(column_labels[i], end="")
+        print("\\\\")
+        print(" \hline\n", end="")
+        for i in range(len(column_labels)):
+            print("&", end="")
+            print("{:.2f}".format(values[i]), end="")
+        print("\\\\")
+        print(" \hline\n", end="")
+        print("\end{tabular}")
+
+    def print_metrics_latex(self, metrics):
+        # metrics = self.get_metrics()
+        print("MAE:", metrics["MAE"].item())
+        print("MSE:", metrics["MSE"].item())
+        return
+        # each key in metrics is a column
+        lables = metrics.keys()
+
+        lables = [k for k in lables]
+        # ipdb.set_trace()
+        values = list(metrics.values())
+        # convert to list
+        # values = list(values)
+
+        self.print_latex_matrix(lables, values)
 
 
 class BaseGanLightning(LightningModule):
@@ -21,6 +111,7 @@ class BaseGanLightning(LightningModule):
         self.generator = nn.Sequential()
         self.frame_discriminator = nn.Sequential()
         self.temporal_discriminator = nn.Sequential()
+        self.metrics = BaseMetricTracker("test")
         self.fake_y_detached = t.tensor(0.0)
         self.automatic_optimization = False
 
@@ -36,6 +127,9 @@ class BaseGanLightning(LightningModule):
         batch_size, y_seq_len, channels, height, width = y.shape
         fake_y = self(x)
 
+        for i in range(1,4):
+            self.optimizers()[i].zero_grad()
+
         fake_data_frames = fake_y.reshape(
             batch_size * y_seq_len, channels, height, width
         )
@@ -43,12 +137,19 @@ class BaseGanLightning(LightningModule):
         real_frame_label = t.ones(batch_size * y_seq_len).to(self.device)
         real_temp_label = t.ones(batch_size).to(self.device)
 
+        fake_sequence = t.cat((x, fake_y), dim=1)
+
+
         generator_loss = (
             self.adversarial_loss(pred_frame_label, real_frame_label)
             + self.adversarial_loss(
-                self.temporal_discriminator(t.cat([x, fake_y], 1)), real_temp_label
+                self.temporal_discriminator(fake_sequence), real_temp_label
             )
-        ) * 0.5
+            + self.adversarial_loss(
+                self.second_temporal_discriminator(fake_sequence),
+                real_temp_label,
+            )
+        ) * 0.33
 
         return generator_loss
 
@@ -109,7 +210,11 @@ class BaseGanLightning(LightningModule):
         x, y = batch
         if batch_idx == 0:
             visualize_predictions(
-                x, y, self(x), path=self.params.save_path + "/validation"
+                x,
+                y,
+                self(x),
+                self.current_epoch,
+                path=self.params.save_path + f"/validation_{self.current_epoch}",
             )
         y = y.cpu()
         pred_y = self(x).cpu()
@@ -131,12 +236,12 @@ class BaseGanLightning(LightningModule):
     ):
         optimizer = self.optimizers()[optimizer_id]
 
-        # if optimizer_id == 2:
-        #     optimizer.zero_grad()
-        #     loss = self.temporal_discriminator_loss(temporal_discriminator, batch)
-        #     loss.backward()
-        #     optimizer.step()
-        #     return loss
+        if optimizer_id == 2:
+            optimizer.zero_grad()
+            loss = self.temporal_discriminator_loss(temporal_discriminator, batch)
+            loss.backward()
+            optimizer.step()
+            return loss
 
         enable_running_stats(temporal_discriminator)
         loss_1 = self.temporal_discriminator_loss(temporal_discriminator, batch)
@@ -224,18 +329,25 @@ class BaseGanLightning(LightningModule):
             #     "loss": temp_disc_loss,
             # }
 
-        # optimizer_idx = 3
-        # if optimizer_idx == 3:
-        #     td2_loss = self.temporal_discriminator_optimizer(
-        #         3, self.second_temporal_discriminator, batch
-        #     )
-        #     self.log("td2_loss", td2_loss, prog_bar=True)
+        optimizer_idx = 3
+        if optimizer_idx == 3:
+            td2_loss = self.temporal_discriminator_optimizer(
+                3, self.second_temporal_discriminator, batch
+            )
+            self.log("td2_loss", td2_loss, prog_bar=True)
 
         if batch_idx % self.params.save_interval == 0:
             t.save(
                 self.state_dict(),
                 os.path.join(self.params.save_path, "model.pt"),
             )
+
+    def test_step(self, batch: tuple[t.Tensor, t.Tensor], batch_idx: int):
+        x, y = batch
+        self.metrics.update(self(x), y)
+
+    def test_epoch_end(self, outputs):
+        return self.metrics.get_metrics()
 
     def training_epoch_end(self, outputs):
         pass
@@ -264,12 +376,10 @@ class BaseGanLightning(LightningModule):
         #  SAM(
         #     self.frame_discriminator.parameters(), t.optim.SGD, lr=lr, momentum=0.9
         # )
-        temporal_discriminator_optimizer = SAM(
-            self.temporal_discriminator.parameters(),
-            t.optim.SGD,
-            lr=lr,
-            momentum=0.9,
+        temporal_discriminator_optimizer = t.optim.Adam(
+            self.temporal_discriminator.parameters(), lr=lr, betas=(b1, b2)
         )
+
         second_temporal_discriminator_optimizer = SAM(
             self.second_temporal_discriminator.parameters(),
             t.optim.SGD,
@@ -281,7 +391,7 @@ class BaseGanLightning(LightningModule):
                 generator_optimizer,
                 frame_discriminator_optimizer,
                 temporal_discriminator_optimizer,
-                # second_temporal_discriminator_optimizer,
+                second_temporal_discriminator_optimizer,
             ],
             [],
         )

@@ -30,6 +30,12 @@ def visualize_predictions(
     for ax_, col in zip(ax[0, :], col_labels):
         ax_.set_title(col)
 
+    # remove ticks from all but the bottom row
+    for ax_ in ax.flat:
+        ax_.xaxis.set_ticklabels([])
+        ax_.yaxis.set_ticklabels([])
+
+
     save_path = os.path.join(path, f"pred_{epoch}.png")
     plt.savefig(save_path)
     # plt.show()

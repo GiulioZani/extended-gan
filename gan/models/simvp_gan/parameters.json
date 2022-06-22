@@ -19,5 +19,6 @@
 	"reduce_lr_on_plateau_patience": 5,
 	"data_location": "./datasets/brazil_data.pt",
 	"crop":64,
-	"data_loader":"brazil"
+	"data_loader":"brazil",
+	"data_threshold": 1000
 }

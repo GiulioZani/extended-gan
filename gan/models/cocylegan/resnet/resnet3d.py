@@ -113,7 +113,7 @@ class ResNet3DClassifier(nn.Module):
     ):
         super().__init__()
 
-        n_input_channels = params.n_channels
+        n_input_channels = params.n_channels 
 
         block_inplanes = [int(x * widen_factor) for x in block_inplanes]
 
@@ -216,9 +216,9 @@ class ResNet3DClassifier(nn.Module):
         x = self.avgpool(x)
 
         x = x.view(x.size(0), -1)
-        x = torch.sigmoid(self.fc(x).squeeze())
+        x = nn.Sigmoid()(self.fc(x))
 
-        return x
+        return x.squeeze()
 
 
 class ResNet3DAutoEncoder(nn.Module):

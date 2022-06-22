@@ -40,6 +40,8 @@ class BaseRegressionModel(LightningModule):
             self.state_dict(),
             os.path.join(self.params.save_path, "checkpoint.ckpt"),
         )
+
+
         return {"val_mse": avg_loss}
 
     def training_epoch_end(self, outputs):
@@ -49,7 +51,13 @@ class BaseRegressionModel(LightningModule):
     def validation_step(self, batch: tuple[t.Tensor, t.Tensor], batch_idx: int):
         x, y = batch
         if batch_idx == 0:
-            visualize_predictions(x, y, self(x), path=self.params.save_path)
+            visualize_predictions(
+                x,
+                y,
+                self(x),
+                self.current_epoch,
+                path=self.params.save_path + f"/validation/",
+            )
         y = y.cpu()
         pred_y = self(x).cpu()
         loss = F.mse_loss(pred_y, y)

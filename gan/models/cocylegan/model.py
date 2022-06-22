@@ -1,5 +1,5 @@
 from argparse import Namespace
-from .base_model import BaseGanLightning
+from .cocycle_gan_model import CoCycleGAN
 from .convlstm.ConvLSTMModule import ConvLSTMClassifier
 
 from .conv2d.conv2dmodel import FrameDiscriminator
@@ -9,18 +9,14 @@ from .simvp.model import SimVP, SimVPTemporalDiscriminator
 from .axial.axial import AxialDiscriminator
 
 
-class Model(BaseGanLightning):
+class Model(CoCycleGAN):
     def __init__(self, params: Namespace):
         super().__init__(params)
         self.generator = SimVP(params)
-        self.frame_discriminator = ResNetFrameDiscriminator(params)
-        self.temporal_discriminator = ResNet3DClassifier(
-            params, block_inplanes=(16, 32, 64, 128)
+        # self.frame_discriminator = ResNetFrameDiscriminator(params)
+        self.discriminator = ResNetTemproalDiscriminator(
+            params, [4, 4, 4, 4], [64, 128, 256, 512]
         )
-        self.second_temporal_discriminator = ResNet3DClassifier(
-            params, block_inplanes=(32, 64, 128, 256)
-        )
-
-        # test copilot
-        
-        # print a joke
+        # self.discriminator = ResNet3DClassifier(
+        #     params, block_inplanes=(32, 64, 128, 256)
+        # )

@@ -60,7 +60,7 @@ class CustomDataModule(LightningDataModule):
         train_size = int(0.8 * len(self.data))
         test_size = len(self.data) - train_size
         self.train_data, self.test_data = random_split(
-            self.data, [train_size, test_size]
+            self.data, [train_size, test_size], t.Generator().manual_seed(42)
         )
 
         # segment data into sequences

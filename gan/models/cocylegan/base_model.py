@@ -34,14 +34,19 @@ class BaseGanLightning(LightningModule):
         x, y = batch
         batch_size, x_seq_len, channels, height, width = x.shape
         batch_size, y_seq_len, channels, height, width = y.shape
+
+        if batch_idx % self.params.save_interval == 0:
+            # save the model
+            t.save(
+                self.state_dict(),
+                os.path.join(self.params.save_path, "model.pt"),
+            )
+
         # train generator
         if optimizer_idx == 0:
 
-
-
             fake_y = self(x)
-            
-            
+
             # i save it as property to avoid recomputing it for the discriminators
             self.fake_y_detached = fake_y.detach()  # used later by discriminators
             fake_data_frames = fake_y.reshape(
@@ -54,13 +59,15 @@ class BaseGanLightning(LightningModule):
             real_temp_label = t.ones(batch_size).to(self.device)
 
             generator_loss = (
-                self.adversarial_loss(pred_temp_label, real_temp_label) 
+                self.adversarial_loss(pred_temp_label, real_temp_label)
                 + self.adversarial_loss(pred_frame_label, real_frame_label)
                 # + F.l1_loss(fake_y, y)
             ) * 1
 
             if batch_idx % 50 == 0:
-                visualize_predictions(x, y, fake_y, self.current_epoch, self.params.save_path)
+                visualize_predictions(
+                    x, y, fake_y, self.current_epoch, self.params.save_path
+                )
 
             train_mse = F.mse_loss(fake_y, y)
             self.log("train_mse", train_mse, prog_bar=True)
@@ -122,7 +129,6 @@ class BaseGanLightning(LightningModule):
             self.state_dict(),
             os.path.join(self.params.save_path, "checkpoint.ckpt"),
         )
-
 
         return {"val_mse": avg_loss}
 

@@ -22,6 +22,7 @@ def _visualize_predictions(
     x: t.Tensor,
     y: t.Tensor,
     preds: t.Tensor,
+    reverse: t.Tensor,
     epoch=1,
     path="imgs/",
 ):
@@ -31,6 +32,7 @@ def _visualize_predictions(
         denorm(x[0].squeeze(1)),
         denorm(y[0].squeeze(1)),
         denorm(preds[0].squeeze(1)),
+        denorm(reverse[0].squeeze(1)),
     ]
     _, ax = plt.subplots(nrows=len(to_plot), ncols=to_plot[0].shape[0])
     plt.suptitle(f"Epoch {epoch}")
@@ -39,7 +41,7 @@ def _visualize_predictions(
             uba = to_plot[i].cpu().detach().numpy()[j]
             col.imshow(uba)
 
-    row_labels = ["input", "GT", "pred"]
+    row_labels = ["input", "GT", "pred", "Input reverse"]
     for ax_, row in zip(ax[:, 0], row_labels):
         ax_.set_ylabel(row)
 
