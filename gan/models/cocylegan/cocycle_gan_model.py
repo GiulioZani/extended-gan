@@ -280,11 +280,14 @@ class CoCycleGAN(LightningModule):
             x, y, future=self.x_future, visualize=visualize
         )
         backward_generator_loss = self.__one_way_generator_loss(
-            y, y, future=self.y_future, visualize=visualize
+            x, y, future=self.y_future, visualize=visualize
         )
         if visualize:
             self.__visualize_predictions(x, y, flag)
-        return forward_generator_loss + backward_generator_loss + F.mse_loss(x, y)
+
+        pred_y = self.generator(self.__embed(x, future=self.y_future))
+
+        return forward_generator_loss + backward_generator_loss + F.l1_loss(pred_y, y)
 
     def training_step(
         self,
