@@ -8,6 +8,7 @@ import os
 import ipdb
 from argparse import Namespace
 import matplotlib.pyplot as plt
+import torchmetrics
 
 from gan.models.cocylegan.visualize import _visualize_predictions
 
@@ -24,6 +25,8 @@ class CoCycleGAN(LightningModule):
         self.generator = nn.Sequential()
         self.discriminator = nn.Sequential()
         self.best_val_loss = float("inf")
+        self.val_mse = torchmetrics.MeanSquaredError()
+
         self.__cyclic_function = {
             "l1": F.l1_loss,
             "bce": self.__norm_bce,
@@ -138,6 +141,7 @@ class CoCycleGAN(LightningModule):
         discriminator_loss = self.__discriminator_loss(x, y)
         pred = self.generator(self.__embed(x, future=self.y_future))
         mse_loss = F.mse_loss(pred, y)
+        self.val_mse.update(pred.detach(), y.detach())
 
         if batch_idx == 0:
             self.__visualize_predictions(x, y, "val")
@@ -151,9 +155,15 @@ class CoCycleGAN(LightningModule):
     def validation_epoch_end(self, outputs):
         avg_loss = t.stack([x["val_loss"] for x in outputs]).mean()
         avg_disc_loss = t.stack([x["val_discriminator_loss"] for x in outputs]).mean()
-        self.log("val_loss", avg_loss, prog_bar=True)
-        self.log("val_gen_loss", avg_loss, prog_bar=True)
-        self.log("val_disc_loss", avg_disc_loss, prog_bar=True)
+        avg_mse_loss = self.val_mse.compute()
+        self.val_mse.reset()
+
+        self.log("r_val_loss", avg_mse_loss, prog_bar=True)
+        
+
+        # self.log("val_loss", avg_loss, prog_bar=True)
+        # self.log("val_gen_loss", avg_loss, prog_bar=True)
+        # self.log("val_disc_loss", avg_disc_loss, prog_bar=True)
         self.log(
             "val_mse_loss",
             t.stack([x["val_mse_loss"] for x in outputs]).mean(),
@@ -163,7 +173,7 @@ class CoCycleGAN(LightningModule):
             self.best_val_loss = avg_loss
             t.save(
                 self.state_dict(),
-                os.path.join(self.params.save_path, "model.pt"),
+                os.path.join(self.params.save_path, "best_model.pt"),
             )
             print("Saved model")
 
@@ -175,6 +185,8 @@ class CoCycleGAN(LightningModule):
         discriminator_loss = self.__discriminator_loss(x, y)
         pred = self.generator(self.__embed(x, future=self.y_future))
         mse_loss = F.mse_loss(pred, y)
+
+        self.val_mse.update(pred.detach(), y.detach())
 
         if batch_idx == 0:
             self.__visualize_predictions(x, y, "test")
@@ -191,6 +203,8 @@ class CoCycleGAN(LightningModule):
         # self.log("val_loss", avg_loss, prog_bar=True)
         # self.log("val_gen_loss", avg_loss, prog_bar=True)
         # self.log("val_disc_loss", avg_disc_loss, prog_bar=True)
+        self.log("r_val_mse_loss", self.val_mse.compute())
+        self.val_mse.reset()
         return {"val_loss": avg_loss}
 
     def __one_way_generator_loss(

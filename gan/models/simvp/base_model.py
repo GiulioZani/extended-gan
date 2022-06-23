@@ -3,6 +3,7 @@ import torch as t
 import torch.nn.functional as F
 from argparse import Namespace
 from torchmetrics import Accuracy
+import torchmetrics
 
 from .visualize import visualize_predictions
 import matplotlib.pyplot as plt
@@ -18,6 +19,7 @@ class BaseRegressionModel(LightningModule):
         self.generator = t.nn.Sequential()
         loss = t.nn.MSELoss()
         self.loss = lambda x, y: loss(x.flatten(), y.flatten())  # t.nn.MSELoss()
+        self.mse_metric = torchmetrics.MeanSquaredError()
 
     def forward(self, z: t.Tensor) -> t.Tensor:
         out = self.generator(z)
@@ -70,9 +72,15 @@ class BaseRegressionModel(LightningModule):
             visualize_predictions(x, y, self(x), path=self.params.save_path)
 
         pred_y = self(x)
-        se = F.mse_loss(pred_y, y, reduction="sum")
+        # se = F.mse_loss(pred_y, y, reduction="sum")
+        self.mse_metric.update(y, pred_y)
+
 
     def test_epoch_end(self, outputs):
+
+        loss = self.mse_metric.compute()
+        self.log("test_mse", loss, prog_bar=True)
+        self.mse_metric.reset()
 
         return {}
 
