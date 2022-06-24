@@ -108,6 +108,33 @@ class CoCycleGAN(LightningModule):
             flag,
         )
 
+        # nrows = min(nrows, x.shape[0])
+        return
+        nrows = 2
+        _, axes = plt.subplots(nrows=nrows, ncols=3)
+        for row in range(nrows):
+            x, fake_y, fake_x = self.to_visualize[row]
+            assert (x.shape == fake_x.shape == fake_y.shape) and x.shape[
+                1
+            ] == 3, f"Wrong shapes: {x.shape=} {fake_y.shape=} {fake_x.shape=}"
+
+            x_row = (x[row] - x[row].min()) / (x[row].max() - x[row].min())
+            fake_y_row = fake_y[row]
+            fake_x_row = fake_x[row]
+            axes[row][0].imshow(x_row.permute(1, 2, 0).cpu().numpy())
+            axes[row][0].set_title("horse" if row == 0 else "zebra")
+            axes[row][1].imshow((fake_y_row.permute(1, 2, 0).cpu().numpy() + 1) / 2)
+            axes[row][1].set_title("zebra" if row == 0 else "horse")
+            axes[row][2].imshow((fake_x_row.permute(1, 2, 0).cpu().numpy() + 1) / 2)
+            axes[row][2].set_title("horse" if row == 0 else "zebra")
+        plt.savefig(
+            os.path.join(
+                self.params.save_path,
+                f"{flag}_prediction.png",
+            )
+        )
+        plt.close()
+
     def validation_step(self, batch: tuple[t.Tensor, t.Tensor], batch_idx: int):
         x, y = batch
         generator_loss = self.__generator_loss(x, y, batch_idx, flag="val")
@@ -131,12 +158,17 @@ class CoCycleGAN(LightningModule):
         avg_mse_loss = self.val_mse.compute()
         self.val_mse.reset()
 
-        self.log("val_loss", avg_mse_loss, prog_bar=True)
+        self.log("r_val_loss", avg_mse_loss, prog_bar=True)
+        
 
         # self.log("val_loss", avg_loss, prog_bar=True)
         # self.log("val_gen_loss", avg_loss, prog_bar=True)
         # self.log("val_disc_loss", avg_disc_loss, prog_bar=True)
-
+        self.log(
+            "val_mse_loss",
+            t.stack([x["val_mse_loss"] for x in outputs]).mean(),
+            prog_bar=True,
+        )
         if avg_loss < self.best_val_loss:
             self.best_val_loss = avg_loss
             t.save(
@@ -145,7 +177,7 @@ class CoCycleGAN(LightningModule):
             )
             print("Saved model")
 
-        return {"val_loss": avg_mse_loss}
+        return {"val_loss": avg_loss}
 
     def test_step(self, batch: tuple[t.Tensor, t.Tensor], batch_idx: int):
         x, y = batch
@@ -167,14 +199,13 @@ class CoCycleGAN(LightningModule):
     def test_epoch_end(self, outputs):
         avg_loss = t.stack([x["val_loss"] for x in outputs]).mean()
         avg_disc_loss = t.stack([x["val_discriminator_loss"] for x in outputs]).mean()
-        # self.log("val_mse_loss", t.stack([x["val_mse_loss"] for x in outputs]).mean())
+        self.log("val_mse_loss", t.stack([x["val_mse_loss"] for x in outputs]).mean())
         # self.log("val_loss", avg_loss, prog_bar=True)
         # self.log("val_gen_loss", avg_loss, prog_bar=True)
         # self.log("val_disc_loss", avg_disc_loss, prog_bar=True)
-        test_loss = self.val_mse.compute()
-        self.log("r_val_mse_loss", test_loss)
+        self.log("r_val_mse_loss", self.val_mse.compute())
         self.val_mse.reset()
-        return {"val_loss": test_loss}
+        return {"val_loss": avg_loss}
 
     def __one_way_generator_loss(
         self,
@@ -190,6 +221,10 @@ class CoCycleGAN(LightningModule):
             fake_y = self.generator(self.__embed(x, future=future))
             fake_x = self.generator(self.__embed(fake_y, future=not future))
             true_label = t.ones(batch_size, 1, device=self.device)
+            # generator_loss_x = self.__adversarial_loss(
+            #    self.discriminator(self.__embed(fake_x, future=future)),
+            #    true_label,
+            # )
             if future:
                 sequence = t.cat((x, fake_y), 1)
             else:
@@ -199,7 +234,14 @@ class CoCycleGAN(LightningModule):
                 self.discriminator(sequence),
                 true_label,
             )
-            return generator_loss_y
+
+            # if visualize:
+            #     self.to_visualize[future] = (
+            #         x.cpu().detach(),
+            #         fake_y.cpu().detach(),
+            #         fake_x.cpu().detach(),
+            #     )
+            return generator_loss_y + self.__cyclic_loss(x, (fake_x))
         else:
             return 0
 
@@ -208,15 +250,9 @@ class CoCycleGAN(LightningModule):
             x, y, future=self.x_future
         )
         backward_discriminator_loss = self.__one_way_discriminator_loss(
-            x, y, future=self.y_future
+            y, y, future=self.y_future
         )
-        cyclic_discriminator_loss = self.__cyclic_way_discriminator_loss(x, y)
-
-        return (
-            forward_discriminator_loss
-            + backward_discriminator_loss
-            + cyclic_discriminator_loss
-        ) / 3
+        return (forward_discriminator_loss + backward_discriminator_loss) / 2
 
     def __one_way_discriminator_loss(self, x: t.Tensor, y: t.Tensor, future: bool):
         batch_size = x.shape[0]
@@ -233,32 +269,9 @@ class CoCycleGAN(LightningModule):
         pred_y_fake_labels_to_future = self.discriminator(sequence)
         return (
             self.__adversarial_loss(pred_x_true_labels, true_label)
+            # + self.__adversarial_loss(pred_x_fake_labels, fake_label)
             + self.__adversarial_loss(pred_y_fake_labels_to_future, fake_label)
         ) / 2
-
-    def __cyclic_way_discriminator_loss(self, x: t.Tensor, y: t.Tensor):
-        batch_size = x.shape[0]
-        true_label = t.ones(batch_size, 1, device=self.device)
-        fake_label = t.zeros(batch_size, 1, device=self.device)
-
-        fake_y = self.generator(self.__embed(x, future=self.y_future))
-        fake_x = self.generator(self.__embed(fake_y, future=self.x_future))
-        sequence = t.cat((fake_x, fake_y), dim=1)
-        pred_x_true_labels = self.discriminator(t.cat((x, y), dim=1))
-        pred_y_fake_labels_to_future = self.discriminator(sequence)
-        return (
-            self.__adversarial_loss(pred_x_true_labels, true_label)
-            + self.__adversarial_loss(pred_y_fake_labels_to_future, fake_label)
-        ) / 2
-
-    def __cyclic_way_generator_loss(self, x: t.Tensor, y: t.Tensor):
-        batch_size = x.shape[0]
-        true_label = t.ones(batch_size, 1, device=self.device)
-
-        fake_y = self.generator(self.__embed(x, future=self.y_future))
-        fake_x = self.generator(self.__embed(fake_y, future=self.x_future))
-        sequence = t.cat((fake_x, fake_y), dim=1)
-        return self.__adversarial_loss(self.discriminator(sequence), true_label)
 
     def __generator_loss(self, x: t.Tensor, y: t.Tensor, batch_idx: int, flag: str):
         visualize = (batch_idx % 10 == 0) if flag == "train" else (batch_idx == 0)
@@ -267,24 +280,11 @@ class CoCycleGAN(LightningModule):
             x, y, future=self.x_future, visualize=visualize
         )
         backward_generator_loss = self.__one_way_generator_loss(
-            x, y, future=self.y_future, visualize=visualize
+            y, y, future=self.y_future, visualize=visualize
         )
-
-        cyclic_generator_loss = self.__cyclic_way_generator_loss(x, y)
-
         if visualize:
             self.__visualize_predictions(x, y, flag)
-
-        pred_y = self.generator(self.__embed(x, future=self.y_future))
-        fake_x = self.generator(self.__embed(pred_y, future=self.x_future))
-
-        return (
-            (forward_generator_loss + backward_generator_loss + cyclic_generator_loss)
-            / 3
-            + F.l1_loss(pred_y, y)
-            + 3 * self.__cyclic_loss(x, fake_x)
-            # + F.mse_loss(pred_y, y)
-        )
+        return forward_generator_loss + backward_generator_loss + F.l1_loss(x, y)
 
     def training_step(
         self,

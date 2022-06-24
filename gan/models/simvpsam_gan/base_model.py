@@ -167,9 +167,9 @@ class BaseGanLightning(LightningModule):
         disable_running_stats(self.generator)
         loss_2 = F.mse_loss(self(batch[0]), batch[1])
         self.manual_backward(loss_2)
-        optimizer.second_step(zero_grad=True)
+        optimizer.second_step(zero_grad=True)   
 
-        
+
 
         enable_running_stats(self.generator)
         loss_1 = self.generator_loss(batch)

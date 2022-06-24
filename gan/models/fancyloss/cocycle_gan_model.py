@@ -20,8 +20,12 @@ class CoCycleGAN(LightningModule):
         super().__init__()  # params)
         self.params = params
         self.embedding = nn.Embedding(2, self.params.imsize**2)
-        # self.fake_y_detached = t.tensor(0.0)
-        # self.fake_x_detached = t.tensor(0.0)
+
+        self.loss_network = nn.Sequential(
+            nn.Linear(6, 1, bias=False),
+            nn.Sigmoid(),
+        )
+
         self.generator = nn.Sequential()
         self.discriminator = nn.Sequential()
         self.best_val_loss = float("inf")
@@ -260,8 +264,18 @@ class CoCycleGAN(LightningModule):
         sequence = t.cat((fake_x, fake_y), dim=1)
         return self.__adversarial_loss(self.discriminator(sequence), true_label)
 
-    def __generator_loss(self, x: t.Tensor, y: t.Tensor, batch_idx: int, flag: str):
-        visualize = (batch_idx % 10 == 0) if flag == "train" else (batch_idx == 0)
+    def __generator_loss(
+        self,
+        x: t.Tensor,
+        y: t.Tensor,
+        batch_idx: int,
+        flag: str,
+        use_network_loss=True,
+        visualize=False,
+    ):
+        visualize = (
+            visualize and (batch_idx % 10 == 0) if flag == "train" else (batch_idx == 0)
+        )
 
         forward_generator_loss = self.__one_way_generator_loss(
             x, y, future=self.x_future, visualize=visualize
@@ -278,11 +292,28 @@ class CoCycleGAN(LightningModule):
         pred_y = self.generator(self.__embed(x, future=self.y_future))
         fake_x = self.generator(self.__embed(pred_y, future=self.x_future))
 
+        if use_network_loss:
+            losses = t.stack(
+                [
+                    forward_generator_loss,
+                    backward_generator_loss,
+                    cyclic_generator_loss,
+                    F.l1_loss(pred_y, y),
+                    self.__cyclic_loss(x, fake_x),
+                    F.mse_loss(pred_y, y),
+                ]
+            )
+
+            loss = self.loss_network(losses)
+            
+            return loss
+
         return (
-            (forward_generator_loss + backward_generator_loss + cyclic_generator_loss)
-            / 3
+            forward_generator_loss
+            + backward_generator_loss
+            + cyclic_generator_loss
             + F.l1_loss(pred_y, y)
-            + 3 * self.__cyclic_loss(x, fake_x)
+            + 10 * self.__cyclic_loss(x, fake_x)
             # + F.mse_loss(pred_y, y)
         )
 
@@ -293,6 +324,11 @@ class CoCycleGAN(LightningModule):
         optimizer_idx: int,
     ):
         x, y = batch
+
+        if batch_idx == 0:
+            # print weights of the loss network
+            print(self.loss_network.state_dict())
+
 
         if batch_idx % self.params.save_interval == 0:
             # save the model
@@ -307,14 +343,26 @@ class CoCycleGAN(LightningModule):
             pred = self.generator(self.__embed(x, future=self.y_future))
             mse_loss = F.mse_loss(pred, y)
             self.log("train_mse_loss", mse_loss, prog_bar=True)
+            newwork_ouput_loss = self.__generator_loss(x, y, batch_idx, "train", visualize=True)    
+            self.log("loss_network_output", newwork_ouput_loss, prog_bar=True)
 
             return {
-                "loss": self.__generator_loss(x, y, batch_idx, flag="train"),
+                "loss": newwork_ouput_loss + mse_loss,
             }
         # train temporal discriminator
         if optimizer_idx == 1:
             loss = self.__discriminator_loss(x, y)
             self.log("TD_Loss", loss, True)
+            return {
+                "loss": loss,
+            }
+
+        # train loss network
+        if optimizer_idx == 2:
+            loss = self.__generator_loss(
+                x, y, batch_idx, flag="train", use_network_loss=False
+            )
+            self.log("network_loss", loss, prog_bar=True)
             return {
                 "loss": loss,
             }
@@ -349,6 +397,10 @@ class CoCycleGAN(LightningModule):
             verbose=True,
             factor=self.params.reduce_lr_on_plateau_factor,
         )
+
+        loss_network_optimizer = t.optim.Adam(
+            self.loss_network.parameters(), lr=lr, betas=(b1, b2)
+        )
         """
         (
             [generator_optimizer, temporal_discriminator_optimizer,],
@@ -369,5 +421,8 @@ class CoCycleGAN(LightningModule):
                     "scheduler": discriminator_scheduler,
                     "monitor": "val_loss",
                 },
+            },
+            {
+                "optimizer": loss_network_optimizer,
             },
         ]
