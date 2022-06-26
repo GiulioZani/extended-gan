@@ -1,6 +1,8 @@
+import imp
 import torch
 from torch import nn
 from .modules import ConvSC, Inception
+import ipdb
 
 
 def stride_generator(N, reverse=False):
@@ -132,9 +134,51 @@ class Mid_Xnet(nn.Module):
         y = z.reshape(B, T, C, H, W)
         return y
 
-from ..axial.axial import AxialLayers
+
 
 class SimVP(nn.Module):
+    def __init__(
+        self,
+        params,
+        shape_in=(10, 1),
+        hid_S=64,
+        hid_T=256,
+        N_S=4,
+        N_T=8,
+        incep_ker=[3, 5, 7, 11],
+        groups=8,
+    ):
+        super(SimVP, self).__init__()
+        self.params = params
+        shape_in = (params.in_seq_len, params.n_channels)
+        T, C = shape_in
+        self.enc = Encoder(C + 1, hid_S, N_S)
+        self.hid = Mid_Xnet(T * hid_S, hid_T, N_T, incep_ker, groups)
+   
+        self.dec = Decoder(hid_S, C, N_S)
+
+    def forward(self, x_raw):
+        B, T, C, H, W = x_raw.shape
+        x = x_raw.view(B * T, C, H, W)
+
+        embed, skip = self.enc(x)
+        _, C_, H_, W_ = embed.shape
+
+        z = embed.view(B, T, C_, H_, W_)
+        # ipdb.set_trace()
+        # z = self.pos_emb(z)
+        # s_hid = self.attn(z)
+        hid = self.hid(z)
+        # hid = hid + s_hid
+        hid = hid.reshape(B * T, C_, H_, W_)
+
+        Y = self.dec(hid, skip)
+        Y = Y.reshape(B, T, C - 1, H, W)
+        Y = torch.tanh(Y)
+        return Y
+
+
+class SimVPTemporalDiscriminator(nn.Module):
     def __init__(
         self,
         params,
@@ -146,16 +190,17 @@ class SimVP(nn.Module):
         incep_ker=[3, 5, 7, 11],
         groups=8,
     ):
-        super(SimVP, self).__init__()
+        super(SimVPTemporalDiscriminator, self).__init__()
         self.params = params
-        shape_in = (params.in_seq_len, params.n_channels)
+        shape_in = (params.in_seq_len + params.out_seq_len, params.n_channels)
         T, C = shape_in
         self.enc = Encoder(C, hid_S, N_S)
-        # self.hid = Mid_Xnet(T * hid_S, hid_T, N_T, incep_ker, groups)
-        self.attn = AxialLayers(hid_S, 3, 6, dropout=0.3)
-
+        self.hid = Mid_Xnet(T * hid_S, hid_T, N_T, incep_ker, groups)
         self.dec = Decoder(hid_S, C, N_S)
-        # self.act = nn.Tanh()
+
+        self.classifier = nn.Sequential(
+            nn.Flatten(), nn.Linear(params.imsize**2, 1), nn.Sigmoid()
+        )
 
     def forward(self, x_raw):
         B, T, C, H, W = x_raw.shape
@@ -165,8 +210,11 @@ class SimVP(nn.Module):
         _, C_, H_, W_ = embed.shape
 
         z = embed.view(B, T, C_, H_, W_)
-        hid = self.attn(z)
-        
+        hid = self.hid(z)
+
+        max = torch.max(hid, dim=1)
+        return self.classifier(max[0])
+
         hid = hid.reshape(B * T, C_, H_, W_)
 
         Y = self.dec(hid, skip)
