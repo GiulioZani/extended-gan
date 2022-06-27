@@ -41,9 +41,13 @@ class CustomDataModule(LightningDataModule):
         # change data type to float
         self.data = self.data.float()
 
-        # self.data = self.segment_and_threshold_data(self.data, params.data_threshold)
-        self.data = self.segment_data(self.data)
-        self.data = self.threshold_data(self.data, params.data_threshold)
+        print("Data shape: {}".format(self.data.shape))
+
+        self.data = self.segment_and_threshold_data(self.data, params.data_threshold)
+
+        print("Data shape After Segmentation: {}".format(self.data.shape))
+        # self.data = self.segment_data(self.data)
+        # self.data = self.threshold_data(self.data, params.data_threshold)
 
         # normalize data with min-max normalization and scale to -1 to 1
         self.data = (
@@ -63,9 +67,8 @@ class CustomDataModule(LightningDataModule):
             self.data, [train_size, test_size], t.Generator().manual_seed(42)
         )
 
-        # segment data into sequences
-        # self.train_data = self.segment_data(self.train_data.dataset)
-        # self.test_data = self.segment_data(self.test_data.dataset)
+        print("total data size:", len(self.data))
+
         self.train_data = SubsetWrapper(
             self.train_data, self.in_seq_len, self.out_seq_len
         )
@@ -89,11 +92,12 @@ class CustomDataModule(LightningDataModule):
         seq_size = self.in_seq_len + self.out_seq_len
         data_seq_size = data.shape[0]
 
-        segments = []
-        for i in range(data_seq_size - seq_size):
-            if t.sum(data[i : i + seq_size]) > threshold:
-                segments.append(data[i : i + seq_size])
-                i += seq_size
+        # overlaping windows of length seq_size with sliding window of 1
+        segments = [
+            data[i : i + seq_size]
+            for i in range(data_seq_size - seq_size)
+            if t.sum(data[i : i + seq_size]) > threshold
+        ]
 
         return t.stack(segments)
 

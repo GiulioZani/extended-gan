@@ -27,6 +27,7 @@ class CoCycleGAN(LightningModule):
         self.best_val_loss = float("inf")
         self.val_mse = torchmetrics.MeanSquaredError()
         self.ssim = torchmetrics.SSIM()
+        self.train_ssim = torchmetrics.SSIM()
 
         self.__cyclic_function = {
             "l1": F.l1_loss,
@@ -356,9 +357,9 @@ class CoCycleGAN(LightningModule):
         # flip_2 = t.rand(x.shape[0], 1, device=self.device) < 0.5
 
         return (
-            10 * adversarial_loss
+            1 * adversarial_loss
             + 10 * pred_cycle_l1  # * flip.sum
-            + 10 * pred_y_l1
+            + 20 * pred_y_l1
             + 10 * pred_x_l1  # * flip_2
         ) / 10
 
@@ -382,15 +383,19 @@ class CoCycleGAN(LightningModule):
 
             pred = self.generator(self.__embed(x, future=self.y_future))
             mse_loss = F.mse_loss(pred, y)
-            self.log("train_mse_loss", mse_loss, prog_bar=True)
+            self.log("mse_loss", mse_loss, prog_bar=True)
             loss = self.__generator_loss(x, y, batch_idx, flag="train")
-            self.log("train_generator_loss", loss, prog_bar=True)
-            mse_sum_train = F.mse_loss(pred, y, reduction="sum")
-            self.log("train_mse_sum", mse_sum_train / 10, prog_bar=True)
-            # pred_r = pred.reshape(pred.shape[0] * pred.shape[1], *pred.shape[2:])
-            # y_rs = y.reshape(y.shape[0] * y.shape[1], *y.shape[2:])
-            # self.ssim.update(pred_r, y_rs)
-            # self.log("train_ssim", self.ssim.compute(), prog_bar=True)
+            self.log("g_loss", loss, prog_bar=True)
+            # mse_sum_train = F.mse_loss(pred, y, reduction="sum")
+            # self.log("mse_sum", mse_sum_train / 10, prog_bar=True)
+
+            # if batch_idx % 500:
+            # self.train_ssim.update(
+            #     pred.reshape(pred.shape[0] * pred.shape[1], *pred.shape[2:]),
+            #     y.reshape(y.shape[0] * y.shape[1], *y.shape[2:]),
+            # )
+            # self.log("ssim", self.train_ssim.compute(), prog_bar=True)
+            # self.log("lr_loss", mse_loss, prog_bar=True)
 
             return {"loss": loss}
 

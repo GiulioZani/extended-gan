@@ -10,8 +10,6 @@ import ipdb
 from torch.functional import F
 
 
-
-
 class AxialLayers(nn.Module):
     def __init__(
         self,
@@ -21,6 +19,7 @@ class AxialLayers(nn.Module):
         embedding_idx=2,
         num_heads=8,
         dropout=0.00,
+        residual=True,
     ):
         super().__init__()
 
@@ -29,6 +28,7 @@ class AxialLayers(nn.Module):
         self.num_heads = num_heads
         self.num_layers = num_layers
         self.dropout = dropout
+        self.residual = residual
 
         self.attentions = nn.Sequential()
         for i in range(self.num_layers):
@@ -47,17 +47,15 @@ class AxialLayers(nn.Module):
             self.attentions.add_module(
                 "layer_{}".format(i), self.__getattr__("layer_{}".format(i))
             )
-            
+
             if i != self.num_layers - 1:
                 self.do = nn.Dropout(self.dropout)
                 self.attentions.add_module(f"do_{i}", self.do)
 
-
-        
-
     def forward(self, x):
         z = self.attentions(x)
-        out = z + x
+        out = z + x if self.residual else z
+
         # out = F.relu(out)
         # out = self.do(out)
         return out
@@ -109,7 +107,9 @@ class AxialDiscriminator(nn.Module):
             nn.ReLU(),
         )
         self.positional_encoder = AxialPositionalEmbedding(
-            embedding_dim, (params.in_seq_len + params.out_seq_len, params.imsize, params.imsize), 2
+            embedding_dim,
+            (params.in_seq_len + params.out_seq_len, params.imsize, params.imsize),
+            2,
         )
 
         self.attentions = AxialLayers(embedding_dim, 3, 4, 2, 4, 0.1)
