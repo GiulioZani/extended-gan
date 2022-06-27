@@ -53,7 +53,15 @@ class CustomDataModule(LightningDataModule):
 
         print("Train Data Size: {}".format(len(self.train_data)))
 
-        self.transform = t.nn.Sequential(transforms.Normalize(0, 1))
+        self.transform = None
+
+        # min max normalize and map to -1 to 1
+
+        max = t.max(data)
+        min = t.min(data)
+
+        self.train_data = 2 * (self.train_data - min) / (max - min) - 1
+        self.test_data = 2 * (self.test_data - min) / (max - min) - 1
 
         self.train_data = Wrapper(
             self.train_data,
@@ -148,7 +156,7 @@ class Wrapper(Dataset):
 
     def __getitem__(self, idx):
 
-        if transforms is not None:
+        if self.transforms is not None:
             data = self.transforms(self.data[idx])
         else:
             data = self.data[idx]
