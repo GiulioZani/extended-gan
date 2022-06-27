@@ -1,24 +1,9 @@
 import os
-from sqlalchemy import false
 import torch as t
 import ipdb
-import matplotlib.pyplot as plt
-from tqdm import tqdm
 from torch.utils.data import DataLoader, Dataset, random_split, Subset
 from pytorch_lightning import LightningDataModule
 from torchvision.transforms import transforms
-from typing import (
-    Callable,
-    Dict,
-    Generic,
-    Iterable,
-    Iterator,
-    List,
-    Optional,
-    Sequence,
-    Tuple,
-    TypeVar,
-)
 
 
 class CustomDataModule(LightningDataModule):
@@ -30,53 +15,55 @@ class CustomDataModule(LightningDataModule):
         self.test_batch_size = params.test_batch_size
         self.in_seq_len = params.in_seq_len
         self.out_seq_len = params.out_seq_len
+        self.tot_seq_len = params.in_seq_len + params.out_seq_len
 
         # num workers = number of cpus to use
         # get number of cpu's on this device
         num_workers = os.cpu_count()
         self.num_workers = num_workers
 
-        self.data = self.load_pytorch_tensor(os.path.join(self.data_location))
+        data = self.load_pytorch_tensor(os.path.join(self.data_location))
 
         # change data type to float
-        self.data = self.data.float()
+        data = data.float()
 
-        print("Data shape: {}".format(self.data.shape))
+        print("Data shape: {}".format(data.shape))
 
-        self.data = self.segment_and_threshold_data(self.data, params.data_threshold)
-
-        print("Data shape After Segmentation: {}".format(self.data.shape))
-        # self.data = self.segment_data(self.data)
-        # self.data = self.threshold_data(self.data, params.data_threshold)
-
-        # normalize data with min-max normalization and scale to -1 to 1
-        self.data = (
-            2 * (self.data - self.data.min()) / (self.data.max() - self.data.min()) - 1
-        )
-
-        # self.data = (self.data - self.data.min()) / (self.data.max() - self.data.min())
-
-        # random split into train and test
-
-        # random seed torch
         t.manual_seed(42)
         # random split into train and test
-        train_size = int(0.8 * len(self.data))
-        test_size = len(self.data) - train_size
-        self.train_data, self.test_data = random_split(
-            self.data, [train_size, test_size], t.Generator().manual_seed(42)
+        train_size = int(0.8 * len(data))
+        test_size = len(data) - train_size
+        self.train_data = data[:train_size]
+        self.test_data = data[train_size:]
+
+        # overlapping windows of length seq_size with sliding window of windows size
+        self.train_data = self.segment_and_threshold_data(
+            self.train_data, params.data_threshold, params.sliding_window_size
         )
 
-        print("total data size:", len(self.data))
-
-        self.train_data = SubsetWrapper(
-            self.train_data, self.in_seq_len, self.out_seq_len
+        # non overlapping segments applied with threshold
+        self.test_data = t.stack(
+            [
+                self.test_data[i : i + self.tot_seq_len]
+                for i in range(
+                    0, len(self.test_data) - self.tot_seq_len, self.tot_seq_len
+                )
+            ]
         )
-        self.test_data = SubsetWrapper(
-            self.test_data, self.in_seq_len, self.out_seq_len
-        )
 
-        # ipdb.set_trace()
+        print("Train Data Size: {}".format(len(self.train_data)))
+
+        self.transform = t.nn.Sequential(transforms.Normalize(0, 1))
+
+        self.train_data = Wrapper(
+            self.train_data,
+            self.in_seq_len,
+            self.out_seq_len,
+            transforms=self.transform,
+        )
+        self.test_data = Wrapper(
+            self.test_data, self.in_seq_len, self.out_seq_len, transforms=self.transform
+        )
 
     def threshold_data(self, data, threshold):
         """
@@ -85,17 +72,18 @@ class CustomDataModule(LightningDataModule):
         flat_data = data.view(data.shape[0], -1)
         return data[flat_data.sum(1) > threshold]
 
-    def segment_and_threshold_data(self, data, threshold):
+    def segment_and_threshold_data(self, data, threshold, sliding_window_size=1):
 
         # iterate over data sequences, only accept sequences of length in_seq_len + out_seq_len where sum of data is greater than threshold
 
         seq_size = self.in_seq_len + self.out_seq_len
         data_seq_size = data.shape[0]
+        # ipdb.set_trace()
 
         # overlaping windows of length seq_size with sliding window of 1
         segments = [
             data[i : i + seq_size]
-            for i in range(data_seq_size - seq_size)
+            for i in range(0, data_seq_size - seq_size, sliding_window_size)
             if t.sum(data[i : i + seq_size]) > threshold
         ]
 
@@ -147,22 +135,27 @@ class CustomDataModule(LightningDataModule):
         )
 
 
-class CustomDataset(Dataset):
-    def __init__(self, data, in_seq_len, out_seq_len):
+class Wrapper(Dataset):
+    def __init__(self, data, in_seq_len, out_seq_len, transforms=None):
         super().__init__()
-        # ipdb.set_trace()
         self.data = data
         self.in_seq_len = in_seq_len
         self.out_seq_len = out_seq_len
+        self.transforms = transforms
 
     def __len__(self):
         return len(self.data)
 
     def __getitem__(self, idx):
-        # ipdb.set_trace()
-        return self.data[idx, : self.in_seq_len].unsqueeze(1), self.data[
-            idx, self.in_seq_len :
-        ].unsqueeze(1)
+
+        if transforms is not None:
+            data = self.transforms(self.data[idx])
+        else:
+            data = self.data[idx]
+
+        return data[: self.in_seq_len].unsqueeze(1), data[self.in_seq_len :].unsqueeze(
+            1
+        )
 
 
 class SubsetWrapper(Subset):
