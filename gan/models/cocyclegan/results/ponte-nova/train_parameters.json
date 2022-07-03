@@ -29,5 +29,11 @@
 	"data_loader": "ponte-nova",
 	"data_threshold": 1000,
 	"save_interval": 100,
-	"sliding_window_size": 1
+	"sliding_window_size": 1,
+	"hparams": {
+		"l1_pred_loss_weight": 1,
+		"l1_past_pred_loss_weight": 1,
+		"l1_cyclic_loss_weight": 0,
+		"adversarial_loss_weight": 0.01
+	}
 }

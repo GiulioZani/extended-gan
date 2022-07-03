@@ -58,7 +58,7 @@ def _visualize_predictions(
         ax_.xaxis.set_ticklabels([])
         ax_.yaxis.set_ticklabels([])
 
-    save_path = os.path.join(path, f"{flag}_{epoch}.png")
+    save_path = os.path.join(path, f"{flag}.png")
     plt.savefig(save_path)
     # plt.show()
     plt.close()

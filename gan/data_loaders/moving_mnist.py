@@ -1,5 +1,5 @@
 """
-forked from https://github.com/vincent-leguen/PhyDNet/tree/master/data
+    https://github.com/gaozhangyang/SimVP-Simpler-yet-Better-Video-Prediction/blob/master/API/dataloader_moving_mnist.py
 """
 
 import gzip
@@ -23,7 +23,7 @@ def load_mnist(root):
     return mnist
 
 
-def load_fixed_set(root, is_train):
+def load_fixed_set(root):
     # Load the fixed dataset
     filename = "mnist_test_seq.npy"
     path = os.path.join(root, filename)
@@ -98,9 +98,6 @@ class MovingMNIST(data.Dataset):
         num_objects=[2],
         transform=None,
     ):
-        """
-        param num_objects: a list of number of possible objects.
-        """
         super(MovingMNIST, self).__init__()
 
         self.dataset = None
@@ -110,7 +107,7 @@ class MovingMNIST(data.Dataset):
             if num_objects[0] != 2:
                 self.mnist = load_mnist(root)
             else:
-                self.dataset = load_fixed_set(root, False)
+                self.dataset = load_fixed_set(root)
         self.length = int(1e4) if self.dataset is None else self.dataset.shape[1]
 
         self.is_train = is_train
@@ -124,6 +121,9 @@ class MovingMNIST(data.Dataset):
         self.digit_size_ = 28
         self.step_length_ = 0.1
 
+        self.mean = 0
+        self.std = 1
+
     def get_random_trajectory(self, seq_length):
         """Generate a random sequence of a MNIST digit"""
         canvas_size = self.image_size_ - self.digit_size_
@@ -132,6 +132,7 @@ class MovingMNIST(data.Dataset):
         theta = random.random() * 2 * np.pi
         v_y = np.sin(theta)
         v_x = np.cos(theta)
+        # self.length = 500
 
         start_y = np.zeros(seq_length)
         start_x = np.zeros(seq_length)
@@ -196,12 +197,7 @@ class MovingMNIST(data.Dataset):
         else:
             images = self.dataset[:, idx, ...]
 
-        # print(np.min(images), np.max(images))
-
-        # if self.transform is not None:
-        #     images = self.transform(images)
-
-        r = 1  # patch size (a 4 dans les PredRNN)
+        r = 1
         w = int(64 / r)
         images = (
             images.reshape((length, w, r, w, r))
@@ -215,24 +211,9 @@ class MovingMNIST(data.Dataset):
         else:
             output = []
 
-        frozen = input[-1]
-        # add a wall to input data
-        # pad = np.zeros_like(input[:, 0])
-        # pad[:, 0] = 1
-        # pad[:, pad.shape[1] - 1] = 1
-        # pad[:, :, 0] = 1
-        # pad[:, :, pad.shape[2] - 1] = 1
-        #
-        # input = np.concatenate((input, np.expand_dims(pad, 1)), 1)
-
         output = torch.from_numpy(2 * output / 255.0 - 1).contiguous().float()
         input = torch.from_numpy(2 * input / 255.0 - 1).contiguous().float()
-        # print()
-        # print(input.size())
-        # print(output.size())
-
-        # out = [idx, input, output]
         return input, output
 
     def __len__(self):
-        return self.length
+        return self.length # if self.is_train else self.length

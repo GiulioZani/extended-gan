@@ -80,6 +80,23 @@ class CustomDataModule(LightningDataModule):
         flat_data = data.view(data.shape[0], -1)
         return data[flat_data.sum(1) > threshold]
 
+    def non_overlaping_segmentation(self, data, threshold):
+        """
+        Segments data into sequences of length in_seq_len + out.
+        """
+
+        tot_lenght = self.in_seq_len + self.out_seq_len
+        data = data[: (len(data) // tot_lenght) * tot_lenght]
+
+        segments = []
+
+        for i in range(len(data) - tot_lenght):
+            if t.sum(data[i : i + tot_lenght]) > threshold:
+                segments.append(data[i : i + tot_lenght])
+                i += tot_lenght  # non overlap
+
+        return t.stack(segments, 0)
+
     def segment_and_threshold_data(self, data, threshold, sliding_window_size=1):
 
         # iterate over data sequences, only accept sequences of length in_seq_len + out_seq_len where sum of data is greater than threshold

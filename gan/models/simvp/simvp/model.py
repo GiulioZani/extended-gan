@@ -139,8 +139,8 @@ class SimVP(nn.Module):
         self,
         params,
         shape_in=(10, 1),
-        hid_S=16,
-        hid_T=256,
+        hid_S=64,
+        hid_T=512,
         N_S=4,
         N_T=8,
         incep_ker=[3, 5, 7, 11],
@@ -151,8 +151,8 @@ class SimVP(nn.Module):
         shape_in = (params.in_seq_len, params.n_channels)
         T, C = shape_in
         self.enc = Encoder(C, hid_S, N_S)
-        # self.hid = Mid_Xnet(T * hid_S, hid_T, N_T, incep_ker, groups)
-        self.attn = AxialLayers(hid_S, 3, 6, dropout=0.3)
+        self.hid = Mid_Xnet(T * hid_S, hid_T, N_T, incep_ker, groups)
+        # self.attn = AxialLayers(hid_S, 3, 6, dropout=0.3)
 
         self.dec = Decoder(hid_S, C, N_S)
         # self.act = nn.Tanh()
@@ -165,7 +165,7 @@ class SimVP(nn.Module):
         _, C_, H_, W_ = embed.shape
 
         z = embed.view(B, T, C_, H_, W_)
-        hid = self.attn(z)
+        hid = self.hid(z)
         
         hid = hid.reshape(B * T, C_, H_, W_)
 

@@ -135,6 +135,9 @@ class Mid_Xnet(nn.Module):
         return y
 
 
+from ..axial.axial import AxialLayers
+from axial_attention import AxialPositionalEmbedding
+
 
 class SimVP(nn.Module):
     def __init__(
@@ -142,7 +145,7 @@ class SimVP(nn.Module):
         params,
         shape_in=(10, 1),
         hid_S=64,
-        hid_T=256,
+        hid_T=512,
         N_S=4,
         N_T=8,
         incep_ker=[3, 5, 7, 11],
@@ -154,7 +157,12 @@ class SimVP(nn.Module):
         T, C = shape_in
         self.enc = Encoder(C + 1, hid_S, N_S)
         self.hid = Mid_Xnet(T * hid_S, hid_T, N_T, incep_ker, groups)
-   
+        # self.attn = AxialLayers(hid_S, 3, 4, dropout=0.3, num_heads=32, residual=True)
+        # self.s_attn = AxialLayers(hid_S, 3, 8, dropout=0.3, residual=True)
+        # self.pos_emb = AxialPositionalEmbedding(
+        #     hid_S, (10, params.imsize // 4, params.imsize // 4), 2
+        # )
+
         self.dec = Decoder(hid_S, C, N_S)
 
     def forward(self, x_raw):
@@ -167,9 +175,9 @@ class SimVP(nn.Module):
         z = embed.view(B, T, C_, H_, W_)
         # ipdb.set_trace()
         # z = self.pos_emb(z)
-        # s_hid = self.attn(z)
+
         hid = self.hid(z)
-        # hid = hid + s_hid
+
         hid = hid.reshape(B * T, C_, H_, W_)
 
         Y = self.dec(hid, skip)

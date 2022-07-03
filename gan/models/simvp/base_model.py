@@ -17,7 +17,7 @@ class BaseRegressionModel(LightningModule):
         self.params = params
         self.save_hyperparameters()
         self.generator = t.nn.Sequential()
-        loss = t.nn.MSELoss()
+        loss = t.nn.SmoothL1Loss()
         self.loss = lambda x, y: loss(x.flatten(), y.flatten())  # t.nn.MSELoss()
         self.mse_metric = torchmetrics.MeanSquaredError()
 

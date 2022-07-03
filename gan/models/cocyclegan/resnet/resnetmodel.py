@@ -413,7 +413,6 @@ class ResNetFrameDiscriminator(nn.Module):
             act_fn=act_fn_by_name[act_fn_name],
             block_class=resnet_blocks_by_name[block_name],
         )
-        
         self._create_network()
         self._init_params()
 

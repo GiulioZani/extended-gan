@@ -1,3 +1,4 @@
+import threading
 import torch as t
 import torch.nn as nn
 import torch.nn.functional as F
@@ -105,6 +106,17 @@ class CoCycleGAN(LightningModule):
             self.params.save_path,
             flag,
         )
+
+    def __save_model(self):
+        # run on thread
+        thread = threading.Thread(
+            target=lambda: t.save(
+                self.state_dict(),
+                os.path.join(self.params.save_path, "model.pt"),
+            ),
+            args=(),
+        )
+        thread.start()
 
     def validation_step(self, batch: tuple[t.Tensor, t.Tensor], batch_idx: int):
         x, y = batch
@@ -270,15 +282,15 @@ class CoCycleGAN(LightningModule):
         b_size = x.shape[0]
 
         fake_y = self.generator(self.__embed(x, future=True))
-        fake_x = self.generator(self.__embed(fake_y, future=False))
+        # fake_x = self.generator(self.__embed(fake_y, future=False))
         pred_x = self.generator(self.__embed(y, future=False))
 
         first_b = t.cat((x, fake_y), 1)
-        second_b = t.cat((fake_x, y), 1)
+        # second_b = t.cat((fake_x, y), 1)
         third_b = t.cat((pred_x, y), 1)
-        fourth_b = t.cat((fake_x, fake_y), 1)
+        # fourth_b = t.cat((fake_x, fake_y), 1)
 
-        all_fakes = t.cat((first_b, second_b, third_b, fourth_b), 0)
+        all_fakes = t.cat((first_b, third_b), 0)
 
         # randomly select b_size from all_fakes
         all_fakes = all_fakes[t.randperm(all_fakes.shape[0])[:b_size]]
@@ -300,15 +312,15 @@ class CoCycleGAN(LightningModule):
         y: t.Tensor,
     ):
         fake_y = self.generator(self.__embed(x, future=True))
-        fake_x = self.generator(self.__embed(fake_y, future=False))
+        # fake_x = self.generator(self.__embed(fake_y, future=False))
         pred_x = self.generator(self.__embed(y, future=False))
 
         first_b = t.cat((x, fake_y), 1)
-        second_b = t.cat((fake_x, y), 1)
+        # second_b = t.cat((fake_x, y), 1)
         third_b = t.cat((pred_x, y), 1)
-        fourth_b = t.cat((fake_x, fake_y), 1)
+        # fourth_b = t.cat((fake_x, fake_y), 1)
 
-        all_fakes = t.cat((first_b, second_b, third_b, fourth_b), 0)
+        all_fakes = t.cat((first_b, third_b), 0)
 
         batch_size = all_fakes.shape[0]
         true_label = t.ones(batch_size, 1, device=self.device)
@@ -336,32 +348,63 @@ class CoCycleGAN(LightningModule):
         pred_y = self.generator(self.__embed(x, future=self.y_future))
         fake_x = self.generator(self.__embed(pred_y, future=self.x_future))
         pred_x = self.generator(self.__embed(y, future=self.x_future))
+        cycle_y = self.generator(self.__embed(pred_x, future=self.y_future))
 
-        pred_y_l1 = F.l1_loss(pred_y, y)
-        pred_x_l1 = F.l1_loss(pred_x, x)
-        pred_cycle_l1 = F.l1_loss(fake_x, x)
+        pred_y_l1 = F.smooth_l1_loss(pred_y, y)
+        pred_x_l1 = F.smooth_l1_loss(pred_x, x)
+        pred_cycle_l1 = F.smooth_l1_loss(fake_x, x)
+        pred_y_cycle_l1 = F.smooth_l1_loss(cycle_y, y)
 
         mse_sum_pred_y_loss = F.mse_loss(pred_y, y, reduction="sum")
         adversarial_loss = self.__three_way_generator_loss(x, y)
 
-        # self.log("CoCycleLoss/forward", forward_generator_loss)
-        # self.log("CoCycleLoss/backward", backward_generator_loss)
-        # self.log("CoCycleLoss/cyclic", cyclic_generator_loss)
+        # pred_y_frame_one_loss = F.l1_loss(pred_y[:, 0, :], y[:, 0, :])
+        # pred_x_frame_one_loss = F.l1_loss(pred_x[:, 0, :], x[:, 0, :])
+
+        # pred_y_frame_last_loss = F.l1_loss(pred_y[:, -1, :], y[:, -1, :])
+        # pred_x_frame_last_loss = F.l1_loss(pred_x[:, -1, :], x[:, -1, :])
+
+        # pred_y_frame_middle_loss = F.l1_loss(pred_y[:, 5, :], y[:, 5, :])
+        # pred_x_frame_middle_loss = F.l1_loss(pred_x[:, 5, :], x[:, 5, :])
+
+        # frame_middle_loss = pred_y_frame_middle_loss + pred_x_frame_middle_loss
+
+        # self.log("CoCycleLoss/pred_y_frame_one_loss", pred_y_frame_one_loss)
+        # self.log("CoCycleLoss/pred_x_frame_one_loss", pred_x_frame_one_loss)
+        # self.log("CoCycleLoss/pred_y_frame_last_loss", pred_y_frame_last_loss)
+        # self.log("CoCycleLoss/pred_x_frame_last_loss", pred_x_frame_last_loss)
+        self.log("CoCycleLoss/pred_y_l1", pred_y_l1)
         self.log("CoCycleLoss/adversarial_loss", adversarial_loss)
         self.log("CoCycleLoss/pred_y", pred_y_l1)
         self.log("CoCycleLoss/pred_x", pred_x_l1)
         self.log("CoCycleLoss/pred_cycle", pred_cycle_l1)
+        self.log("CoCycleLoss/pred_y_cycle", pred_y_cycle_l1)
         self.log("CoCycleLoss/mse_sum_pred_y", mse_sum_pred_y_loss / 10)
 
-        # flip = t.rand(x.shape[0], 1, device=self.device) < 0.5
-        # flip_2 = t.rand(x.shape[0], 1, device=self.device) < 0.5
+        loss = (
+            +self.params.hparams["l1_cyclic_loss_weight"]
+            * (pred_cycle_l1 + pred_y_cycle_l1)
+            + self.params.hparams["l1_pred_loss_weight"] * pred_y_l1
+            + self.params.hparams["l1_past_pred_loss_weight"] * pred_x_l1
+        )
 
+        max = loss * 1e-3
+        adversarial_loss = max * adversarial_loss
+        adversarial_loss = adversarial_loss.max(max)
+
+        return loss + adversarial_loss
         return (
-            1 * adversarial_loss
-            + 10 * pred_cycle_l1  # * flip.sum
-            + 20 * pred_y_l1
-            + 10 * pred_x_l1  # * flip_2
-        ) / 10
+            adversarial_loss
+            + self.params.hparams["l1_cyclic_loss_weight"]
+            * (pred_cycle_l1 + pred_y_cycle_l1)
+            + self.params.hparams["l1_pred_loss_weight"] * pred_y_l1
+            + self.params.hparams["l1_past_pred_loss_weight"] * pred_x_l1
+            # + self.params.hparams["l1_pred_frame_one_loss_weight"]
+            # * (pred_y_frame_one_loss + pred_x_frame_one_loss)
+            # + self.params.hparams["l1_pred_frame_last_loss_weight"]
+            # * (pred_y_frame_last_loss + pred_x_frame_last_loss)
+            # + self.params.hparams["l1_pred_frame_middle_loss_weight"] * frame_middle_loss
+        )
 
     def training_step(
         self,
@@ -372,11 +415,8 @@ class CoCycleGAN(LightningModule):
         x, y = batch
 
         if batch_idx % self.params.save_interval == 0:
-            # save the model
-            t.save(
-                self.state_dict(),
-                os.path.join(self.params.save_path, "model.pt"),
-            )
+            # save the model on a thread
+            self.__save_model()
 
         # train generator
         if optimizer_idx == 0:
@@ -386,17 +426,6 @@ class CoCycleGAN(LightningModule):
             self.log("mse_loss", mse_loss, prog_bar=True)
             loss = self.__generator_loss(x, y, batch_idx, flag="train")
             self.log("g_loss", loss, prog_bar=True)
-            # mse_sum_train = F.mse_loss(pred, y, reduction="sum")
-            # self.log("mse_sum", mse_sum_train / 10, prog_bar=True)
-
-            # if batch_idx % 500:
-            # self.train_ssim.update(
-            #     pred.reshape(pred.shape[0] * pred.shape[1], *pred.shape[2:]),
-            #     y.reshape(y.shape[0] * y.shape[1], *y.shape[2:]),
-            # )
-            # self.log("ssim", self.train_ssim.compute(), prog_bar=True)
-            # self.log("lr_loss", mse_loss, prog_bar=True)
-
             return {"loss": loss}
 
         # train temporal discriminator

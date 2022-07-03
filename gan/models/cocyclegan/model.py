@@ -15,10 +15,8 @@ class Model(CoCycleGAN):
         self.generator = SimVP(params)
         # self.frame_discriminator = ResNetFrameDiscriminator(params)
         self.discriminator = ResNetTemproalDiscriminator(
-            params, [4, 4, 4, 4], [32, 64, 128, 256]
+            params, [4, 4, 4], [32, 64, 128]
         )
         # self.discriminator = ResNet3DClassifier(
         #     params, block_inplanes=(32, 64, 128, 256)
         # )
-
-
