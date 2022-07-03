@@ -5,7 +5,7 @@ import ipdb
 import torch
 import torch.nn as nn
 import torch as t
-import torch.nn.functional as f
+import torch.nn.functional as F
 from .convlstm.ConvLSTMModule import ConvLSTMBlock
 from .conv2d.conv2dmodel import ConvBlock
 
