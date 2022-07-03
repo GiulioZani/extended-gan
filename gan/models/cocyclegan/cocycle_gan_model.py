@@ -381,20 +381,20 @@ class CoCycleGAN(LightningModule):
         self.log("CoCycleLoss/pred_y_cycle", pred_y_cycle_l1)
         self.log("CoCycleLoss/mse_sum_pred_y", mse_sum_pred_y_loss / 10)
 
-        loss = (
-            +self.params.hparams["l1_cyclic_loss_weight"]
-            * (pred_cycle_l1 + pred_y_cycle_l1)
-            + self.params.hparams["l1_pred_loss_weight"] * pred_y_l1
-            + self.params.hparams["l1_past_pred_loss_weight"] * pred_x_l1
-        )
+        # loss = (
+        #     +self.params.hparams["l1_cyclic_loss_weight"]
+        #     * (pred_cycle_l1 + pred_y_cycle_l1)
+        #     + self.params.hparams["l1_pred_loss_weight"] * pred_y_l1
+        #     + self.params.hparams["l1_past_pred_loss_weight"] * pred_x_l1
+        # )
 
-        max = loss * 1e-3
-        adversarial_loss = max * adversarial_loss
-        adversarial_loss = adversarial_loss.max(max)
+        # max = loss * 1e-3
+        # adversarial_loss = max * adversarial_loss
+        # adversarial_loss = adversarial_loss.max(max)
 
-        return loss + adversarial_loss
+        # return loss + adversarial_loss
         return (
-            adversarial_loss
+            self.params.hparams["adversarial_loss_weight"] * adversarial_loss
             + self.params.hparams["l1_cyclic_loss_weight"]
             * (pred_cycle_l1 + pred_y_cycle_l1)
             + self.params.hparams["l1_pred_loss_weight"] * pred_y_l1

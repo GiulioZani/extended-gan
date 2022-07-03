@@ -34,6 +34,6 @@
 		"l1_pred_loss_weight": 1,
 		"l1_past_pred_loss_weight": 1,
 		"l1_cyclic_loss_weight": 0,
-		"adversarial_loss_weight": 0.01
+		"adversarial_loss_weight": 0
 	}
 }
