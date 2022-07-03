@@ -282,15 +282,15 @@ class CoCycleGAN(LightningModule):
         b_size = x.shape[0]
 
         fake_y = self.generator(self.__embed(x, future=True))
-        # fake_x = self.generator(self.__embed(fake_y, future=False))
+        fake_x = self.generator(self.__embed(fake_y, future=False))
         pred_x = self.generator(self.__embed(y, future=False))
 
         first_b = t.cat((x, fake_y), 1)
-        # second_b = t.cat((fake_x, y), 1)
+        second_b = t.cat((fake_x, y), 1)
         third_b = t.cat((pred_x, y), 1)
-        # fourth_b = t.cat((fake_x, fake_y), 1)
+        fourth_b = t.cat((fake_x, fake_y), 1)
 
-        all_fakes = t.cat((first_b, third_b), 0)
+        all_fakes = t.cat((first_b, second_b, third_b, fourth_b), 0)
 
         # randomly select b_size from all_fakes
         all_fakes = all_fakes[t.randperm(all_fakes.shape[0])[:b_size]]
@@ -312,15 +312,15 @@ class CoCycleGAN(LightningModule):
         y: t.Tensor,
     ):
         fake_y = self.generator(self.__embed(x, future=True))
-        # fake_x = self.generator(self.__embed(fake_y, future=False))
+        fake_x = self.generator(self.__embed(fake_y, future=False))
         pred_x = self.generator(self.__embed(y, future=False))
 
         first_b = t.cat((x, fake_y), 1)
-        # second_b = t.cat((fake_x, y), 1)
+        second_b = t.cat((fake_x, y), 1)
         third_b = t.cat((pred_x, y), 1)
-        # fourth_b = t.cat((fake_x, fake_y), 1)
+        fourth_b = t.cat((fake_x, fake_y), 1)
 
-        all_fakes = t.cat((first_b, third_b), 0)
+        all_fakes = t.cat((first_b, second_b, third_b, fourth_b), 0)
 
         batch_size = all_fakes.shape[0]
         true_label = t.ones(batch_size, 1, device=self.device)
