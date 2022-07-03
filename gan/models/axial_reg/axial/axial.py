@@ -6,7 +6,7 @@ from axial_attention import AxialAttention, AxialPositionalEmbedding
 import ipdb
 
 
-from torch.functional import F
+from torch.nn.functional import F
 
 
 class AxialLayers(nn.Module):
