@@ -406,9 +406,9 @@ class CoCycleGAN(LightningModule):
             + self.params.hparams["l1_cyclic_loss_weight"]
             * (pred_cycle_l1 + pred_y_cycle_l1)
             + self.params.hparams["l1_pred_loss_weight"]
-            * (F.mse_loss(pred_y, y) )
+            * (F.mse_loss(pred_y, y) + pred_y_l1)
             + self.params.hparams["l1_past_pred_loss_weight"]
-            * (F.mse_loss(pred_x, x))
+            * (F.mse_loss(pred_x, x) + pred_x_l1)
             + l2_norm * l2_lambda
             # + self.params.hparams["l1_pred_frame_one_loss_weight"]
             # * (pred_y_frame_one_loss + pred_x_frame_one_loss)
