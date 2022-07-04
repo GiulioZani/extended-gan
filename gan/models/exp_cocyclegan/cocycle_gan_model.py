@@ -394,16 +394,21 @@ class CoCycleGAN(LightningModule):
 
         # return loss + adversarial_loss
 
-        l2_lambda = 0.000001
+        l2_lambda = 0.0000001
         l2_norm = sum(p.abs().sum() for p in self.generator.parameters())
-        self.log("CoCycleLoss/l2_norm", l2_lambda * l2_norm, prog_bar=True)
-
+        # self.log("CoCycleLoss/l1_norm", l2_lambda * l2_norm, prog_bar=True)
+        # self.log("OneWayLoss/l1", F.smooth_l1_loss(pred_y, y), prog_bar=True)
+        # self.log(
+        #     "OneWayLoss/pred_y", (F.mse_loss(pred_y, y) + 10 * pred_y_l1), prog_bar=True
+        # )
         return (
             self.params.hparams["adversarial_loss_weight"] * adversarial_loss
             + self.params.hparams["l1_cyclic_loss_weight"]
             * (pred_cycle_l1 + pred_y_cycle_l1)
-            + self.params.hparams["l1_pred_loss_weight"] * (F.mse_loss(pred_y, y))
-            + self.params.hparams["l1_past_pred_loss_weight"] * (F.mse_loss(pred_x, x))
+            + self.params.hparams["l1_pred_loss_weight"]
+            * (F.mse_loss(pred_y, y) + pred_y_l1)
+            + self.params.hparams["l1_past_pred_loss_weight"]
+            * (F.mse_loss(pred_x, x) + pred_x_l1)
             + l2_norm * l2_lambda
             # + self.params.hparams["l1_pred_frame_one_loss_weight"]
             # * (pred_y_frame_one_loss + pred_x_frame_one_loss)
