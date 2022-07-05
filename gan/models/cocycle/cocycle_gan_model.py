@@ -27,8 +27,8 @@ class CoCycleGAN(LightningModule):
         self.discriminator = nn.Sequential()
         self.best_val_loss = float("inf")
         self.val_mse = torchmetrics.MeanSquaredError()
-        self.ssim = torchmetrics.SSIM()
-        self.train_ssim = torchmetrics.SSIM()
+        self.ssim = torchmetrics.StructuralSimilarityIndexMeasure()
+        self.train_ssim = torchmetrics.StructuralSimilarityIndexMeasure()
 
         self.x_future = False
         self.y_future = True
