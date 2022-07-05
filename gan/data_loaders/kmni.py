@@ -40,9 +40,9 @@ class CustomDataset(Dataset):
         # add transforms
         if self.transform is not None:
             imgs = self.transform(imgs)
-        target_img = imgs[: self.num_output]
+        target_img = imgs[12:]
         # target_img = imgs[-1] # Modified
-        input_img = imgs[self.num_input :]
+        input_img = imgs[6:12]
 
         input_img = t.from_numpy(input_img)[:, None]  # .permute(2, 3, 1, 0)
         target_img = t.from_numpy(target_img)[:, None]  # .permute(2, 3, 1, 0)
