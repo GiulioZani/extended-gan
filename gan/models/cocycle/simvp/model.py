@@ -145,7 +145,7 @@ class SimVP(nn.Module):
         params,
         shape_in=(10, 1),
         hid_S=64,
-        hid_T=512,
+        hid_T=256,
         N_S=4,
         N_T=8,
         incep_ker=[3, 5, 7, 11],
