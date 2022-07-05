@@ -164,6 +164,10 @@ class SimVP(nn.Module):
         # )
 
         self.dec = Decoder(hid_S, C, N_S)
+        self.act_out = {
+            "tanh":nn.Tanh,
+            "sigmoid":nn.Sigmoid
+        }[params.output_activation]
 
     def forward(self, x_raw):
         B, T, C, H, W = x_raw.shape
@@ -182,7 +186,7 @@ class SimVP(nn.Module):
 
         Y = self.dec(hid, skip)
         Y = Y.reshape(B, T, C - 1, H, W)
-        Y = torch.tanh(Y)
+        Y = self.act_out(Y)
         return Y
 
 
