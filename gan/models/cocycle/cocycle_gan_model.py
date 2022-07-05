@@ -176,10 +176,10 @@ class CoCycleGAN(LightningModule):
         pred_x = self.generator(self.__embed(y, future=self.x_future))
         cycle_y = self.generator(self.__embed(pred_x, future=self.y_future))
 
-        pred_y_l1 = F.smooth_l1_loss(pred_y, y)
-        pred_x_l1 = F.smooth_l1_loss(pred_x, x)
-        pred_cycle_l1 = F.smooth_l1_loss(fake_x, x)
-        pred_y_cycle_l1 = F.smooth_l1_loss(cycle_y, y)
+        pred_y_l1 = F.mse_loss(pred_y, y)
+        pred_x_l1 = F.mse_loss(pred_x, x)
+        pred_cycle_l1 = F.mse_loss(fake_x, x)
+        pred_y_cycle_l1 = F.mse_loss(cycle_y, y)
 
         mse_sum_pred_y_loss = F.mse_loss(pred_y, y, reduction="sum")
 
