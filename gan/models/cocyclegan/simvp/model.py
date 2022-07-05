@@ -187,7 +187,7 @@ class SimVP(nn.Module):
         Y = self.dec(hid, skip)
         Y = Y.reshape(B, T, C - 1, H, W)
         Y = self.act_out(Y)
-        return Y
+        return Y[:, :self.params.out_seq_len]
 
 
 class SimVPTemporalDiscriminator(nn.Module):
