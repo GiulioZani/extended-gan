@@ -30,7 +30,7 @@
 	"data_threshold": 1000,
 	"save_interval": 100,
 	"sliding_window_size": 1,
-	"act_out":"sigmoid",
+	"output_activation":"sigmoid",
 	"hparams": {
 		"l1_pred_loss_weight": 50,
 		"l1_past_pred_loss_weight": 50,
