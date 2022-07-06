@@ -356,9 +356,10 @@ class CoCycleGAN(LightningModule):
         pred_y_cycle_l1 = F.smooth_l1_loss(cycle_y, y)
 
         mse_sum_pred_y_loss = F.mse_loss(pred_y, y, reduction="sum")
-        adversarial_loss = self.__three_way_generator_loss(
+        temporal_adversarial_loss = self.__three_way_generator_loss(
             x, y
-        ) + self.__frame_disc_generator_adversarial_loss(x, y)
+        ) 
+        frame_adversarial_loss = + self.__frame_disc_generator_adversarial_loss(x, y)
 
         # pred_y_frame_one_loss = F.l1_loss(pred_y[:, 0, :], y[:, 0, :])
         # pred_x_frame_one_loss = F.l1_loss(pred_x[:, 0, :], x[:, 0, :])
@@ -376,7 +377,7 @@ class CoCycleGAN(LightningModule):
         # self.log("CoCycleLoss/pred_y_frame_last_loss", pred_y_frame_last_loss)
         # self.log("CoCycleLoss/pred_x_frame_last_loss", pred_x_frame_last_loss)
         self.log("CoCycleLoss/pred_y_l1", pred_y_l1)
-        self.log("CoCycleLoss/adversarial_loss", adversarial_loss)
+        self.log("CoCycleLoss/adversarial_loss", temporal_adversarial_loss)
         self.log("CoCycleLoss/pred_y", pred_y_l1)
         self.log("CoCycleLoss/pred_x", pred_x_l1)
         self.log("CoCycleLoss/pred_cycle", pred_cycle_l1)
@@ -404,7 +405,8 @@ class CoCycleGAN(LightningModule):
         #     "OneWayLoss/pred_y", (F.mse_loss(pred_y, y) + 10 * pred_y_l1), prog_bar=True
         # )
         return (
-            self.params.hparams["adversarial_loss_weight"] * adversarial_loss
+            self.params.hparams.temporal_adversarial_loss_weight * temporal_adversarial_loss
+            + self.params.hparams.frame_adversarial_loss_weight * frame_adversarial_loss
             + self.params.hparams["l1_cyclic_loss_weight"]
             * (pred_cycle_l1 + pred_y_cycle_l1)
             + self.params.hparams["l1_pred_loss_weight"] * (pred_y_l1)

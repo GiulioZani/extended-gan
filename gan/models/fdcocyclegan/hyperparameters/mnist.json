@@ -32,8 +32,9 @@
 	"hparams": {
 		"l1_pred_loss_weight": 10,
 		"l1_past_pred_loss_weight": 10,
-		"l1_cyclic_loss_weight": 0.1,
-		"adversarial_loss_weight": 0.1,
+		"l1_cyclic_loss_weight": 0,
+		"frame_adversarial_loss_weight": 0.1,
+		"temporal_adversarial_loss_weight": 0.5,
 		"l2_norm_weight": 0.00001
 	}
 }
