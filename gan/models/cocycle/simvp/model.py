@@ -36,15 +36,15 @@ class Decoder(nn.Module):
         strides = stride_generator(N_S, reverse=True)
         self.dec = nn.Sequential(
             *[ConvSC(C_hid, C_hid, stride=s, transpose=True) for s in strides[:-1]],
-            ConvSC(2 * C_hid, C_hid, stride=strides[-1], transpose=True)
+            ConvSC( C_hid, C_hid, stride=strides[-1], transpose=True)
         )
         self.readout = nn.Conv2d(C_hid, C_out, 1)
 
     def forward(self, hid, enc1=None):
-        for i in range(0, len(self.dec) - 1):
+        for i in range(0, len(self.dec)):
             hid = self.dec[i](hid)
-        Y = self.dec[-1](torch.cat([hid, enc1], dim=1))
-        Y = self.readout(Y)
+        # Y = self.dec[-1](torch.cat([hid, enc1], dim=1))
+        Y = self.readout(hid)
         return Y
 
 
@@ -157,7 +157,7 @@ class SimVP(nn.Module):
         T, C = shape_in
         self.enc = Encoder(C + 1, hid_S, N_S)
         self.hid = Mid_Xnet(T * hid_S, hid_T, N_T, incep_ker, groups)
-        # self.attn = AxialLayers(hid_S, 3, 4, dropout=0.3, num_heads=32, residual=True)
+        # self.attn = AxialLayers(hid_S, 3, 4, dropout=0.0, num_heads=32, residual=False)
         # self.s_attn = AxialLayers(hid_S, 3, 8, dropout=0.3, residual=True)
         # self.pos_emb = AxialPositionalEmbedding(
         #     hid_S, (10, params.imsize // 4, params.imsize // 4), 2
@@ -177,6 +177,7 @@ class SimVP(nn.Module):
         # z = self.pos_emb(z)
 
         hid = self.hid(z)
+        # hid = self.attn(z)
 
         hid = hid.reshape(B * T, C_, H_, W_)
 
