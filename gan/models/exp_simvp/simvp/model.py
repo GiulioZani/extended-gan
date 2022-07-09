@@ -38,7 +38,7 @@ class Decoder(nn.Module):
         super(Decoder, self).__init__()
         strides = stride_generator(N_S, reverse=True)
         self.dec = nn.Sequential(
-            ConvSC(C_hid * 3 + hid_T, C_hid * 4, stride=strides[0], transpose=True),
+            ConvSC(C_hid * 4 + hid_T, C_hid * 4, stride=strides[0], transpose=True),
             ConvSC(C_hid * 4, C_hid * 2, stride=strides[1], transpose=True),
             ConvSC(C_hid * 2, C_hid * 1, stride=strides[2], transpose=True),
             *[ConvSC(C_hid, C_hid, stride=s, transpose=True) for s in strides[3:]],
@@ -48,7 +48,8 @@ class Decoder(nn.Module):
 
     def forward(self, hid, enc1=None, skip=None, ySkip=None):
         # ipdb.set_trace()
-        hid = torch.cat([hid, enc1, skip, ySkip], dim=1)
+        noise = torch.randn_like(hid)
+        hid = torch.cat([hid, noise, enc1, skip, ySkip], dim=1)
         for i in range(0, len(self.dec)):
             hid = self.dec[i](hid)
         # Y = self.dec[-1](torch.cat([hid, enc1], dim=1))

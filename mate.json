@@ -1,3 +1,7 @@
 {
-    "project": "gan"
+    "project": "gan",
+    "override_params":{
+        "enabled": false,
+        "cuda": true
+    }
 }
