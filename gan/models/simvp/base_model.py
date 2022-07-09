@@ -98,6 +98,7 @@ class BaseRegressionModel(LightningModule):
             patience=self.params.reduce_lr_on_plateau_patience,
             verbose=True,
             factor=self.params.reduce_lr_on_plateau_factor,
+            threshold=self.params.reduce_lr_on_plateau_threshold,
         )
 
         return {
