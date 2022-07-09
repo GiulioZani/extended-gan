@@ -30,7 +30,7 @@
 	"data_threshold": 1000,
 	"save_interval": 100,
 	"hparams": {
-		"l1_pred_loss_weight": 10,
+		"l1_pred_loss_weight": 1,
 		"l1_past_pred_loss_weight": 1,
 		"l1_cyclic_loss_weight": 0.1,
 		"adversarial_loss_weight": 0,
