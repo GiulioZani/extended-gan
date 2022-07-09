@@ -1,0 +1,7 @@
+{
+    "data_location": "str_path_to_data",
+    "train_batch_size": 3,
+    "test_batch_size": 10,
+    "in_seq_len": 10,
+    "out_seq_len": 10
+}
