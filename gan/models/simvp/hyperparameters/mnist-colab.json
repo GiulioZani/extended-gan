@@ -24,7 +24,7 @@
 	"early_stopping_patience": 5,
 	"reduce_lr_on_plateau_patience": 0,
 	"reduce_lr_on_plateau_factor": 0.5,
-	"reduce_lr_on_plateau_threshold": 0.01,
+	"reduce_lr_on_plateau_threshold": 0.001,
 	"data_location": "./datasets/moving-mnist/",
 	"crop": 64,
 	"data_loader": "moving_mnist",
