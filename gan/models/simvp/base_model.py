@@ -99,7 +99,7 @@ class BaseRegressionModel(LightningModule):
             verbose=True,
             factor=self.params.reduce_lr_on_plateau_factor,
             threshold=self.params.reduce_lr_on_plateau_threshold,
-            threshold_mode="abs",
+            threshold_mode="rel",
             mode="min",
         )
 
