@@ -11,6 +11,7 @@ def visualize_predictions(
     preds: t.Tensor,
     epoch=1,
     path="imgs/",
+    label="train"
 ):
     if not os.path.exists(path):
         os.mkdir(path)
@@ -36,7 +37,7 @@ def visualize_predictions(
         ax_.yaxis.set_ticklabels([])
 
 
-    save_path = os.path.join(path, f"pred_{epoch}.png")
+    save_path = os.path.join(path, f"{label}.png")
     plt.savefig(save_path)
     # plt.show()
     plt.close()
