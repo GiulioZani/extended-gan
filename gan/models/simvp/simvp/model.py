@@ -23,14 +23,15 @@ class Encoder(nn.Module):
         )
 
     def forward(self, x):  # B*4, 3, 128, 128
-        enc1 = self.enc[0](x)
-        latent = enc1
-        for i in range(1, len(self.enc)):
-            latent = self.enc[i](latent)
-        return latent
+        for i in range(0, len(self.enc)):
+            x = self.enc[i](x)
+        return x
 
     def skip(self, x):
         return self.forward(x)
+
+    def skip_first(self, x):
+        return self.enc[0](x)
 
 
 class Decoder(nn.Module):
@@ -41,18 +42,18 @@ class Decoder(nn.Module):
             ConvSC(C_hid * 2 + hid_T, C_hid * 4, stride=strides[0], transpose=True),
             ConvSC(C_hid * 4, C_hid * 2, stride=strides[1], transpose=True),
             ConvSC(C_hid * 2, C_hid * 1, stride=strides[2], transpose=True),
-            *[ConvSC(C_hid, C_hid, stride=s, transpose=True) for s in strides[3:]],
-            # ConvSC(C_hid, C_hid, stride=strides[-1], transpose=True)
+            *[ConvSC(C_hid, C_hid, stride=s, transpose=True) for s in strides[3:-1]],
+            ConvSC(C_hid * 2, C_hid, stride=strides[-1], transpose=True),
         )
         self.readout = nn.Conv2d(C_hid, C_out, 1)
 
-    def forward(self, hid, skip_before=None, skilp_all=None):
+    def forward(self, hid, skip_before=None, skilp_all=None, skip_first=None):
         # ipdb.set_trace()
         # noise = torch.randn_like(hid)
         hid = torch.cat([hid, skilp_all, skip_before], dim=1)
-        for i in range(0, len(self.dec)):
+        for i in range(0, len(self.dec)-1):
             hid = self.dec[i](hid)
-        # Y = self.dec[-1](torch.cat([hid, enc1], dim=1))
+        Y = self.dec[-1](torch.cat([hid, skip_first], dim=1))
         Y = self.readout(hid)
         return Y
 
@@ -179,11 +180,11 @@ class SimVP(nn.Module):
     def pos_emb(self, x, T):
         B, C, H, W = x.shape
         # B of T tensor
-        
+
         label = t.tensor(T, device=x.device).int()
         labels = label.repeat(B, 1)
         # ipdb.set_trace()
-        
+
         embedding = self.embedding(labels)
         embedding = embedding.reshape(B, 1, H, W)
         embedding = embedding.repeat(1, C, 1, 1)
@@ -196,32 +197,36 @@ class SimVP(nn.Module):
         embed = self.enc(x)
         _, C_, H_, W_ = embed.shape
 
-
         z = embed.view(B, T, C_, H_, W_)
 
         # positionally embed z
-        
+
         hid, skip_all = self.hid(z)
-        
+
         for i in range(T):
-            hid[:, i, :, :, :] = self.pos_emb(hid[:, i, :, :, :], i if future else T - i - 1)
-        
+            hid[:, i, :, :, :] = self.pos_emb(
+                hid[:, i, :, :, :], i if future else T - i - 1
+            )
+
         outs = []
         embed = self.enc.skip(x_raw[:, -1 if future else 0, ...])
+        skip_first = self.enc.skip_first(x_raw[:, -1 if future else 0, ...])
+
         if future:
             for i in range(T):
                 input = self.pos_emb(hid[:, i, ...], i)
-                out = self.dec(input, embed, skip_all)
+                out = self.dec(input, embed, skip_all, skip_first)
                 outs.append(out)
                 # ipdb.set_trace()
                 # z = torch.cat([x[:B, :1, ...], out], 1)
                 # z = self.embed(out, future)
                 # ipdb.set_trace()
                 embed = self.enc.skip(out)
+                skip_first = self.enc.skip_first(out)
         else:
             for i in range(T - 1, -1, -1):
                 input = self.pos_emb(hid[:, i, ...], i)
-                out = self.dec(input, embed, skip_all)
+                out = self.dec(input, embed, skip_all, skip_first)
                 # outs.insert(0, out)
                 outs.append(out)
                 z = torch.cat([x[:B, :1, ...], out], 1)
@@ -234,7 +239,7 @@ class SimVP(nn.Module):
 
         Y = torch.stack(outs, dim=1)
 
-        Y = Y.reshape(B, T, C , H, W)
+        Y = Y.reshape(B, T, C, H, W)
 
         Y = torch.tanh(Y)
         return Y

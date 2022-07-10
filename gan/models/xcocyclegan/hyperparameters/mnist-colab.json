@@ -18,6 +18,7 @@
 	"b1": 0.5,
 	"b2": 0.999,
 	"gaussian_noise_std": 0.1,
+	"reduce_lr_on_plateau_threshold": 1e-5,
 	"in_seq_len": 10,
 	"out_seq_len": 10,
 	"max_epochs": 100,

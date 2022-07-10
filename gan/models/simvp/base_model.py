@@ -46,10 +46,10 @@ class BaseRegressionModel(LightningModule):
     def validation_epoch_end(self, outputs):
         avg_loss = t.stack([x["val_loss"] for x in outputs]).mean()
         self.log("val_loss", avg_loss, prog_bar=True)
-        t.save(
-            self.state_dict(),
-            os.path.join(self.params.save_path, "model.pt"),
-        )
+        # t.save(
+        #     self.state_dict(),
+        #     os.path.join(self.params.save_path, "model.pt"),
+        # )
 
         return {"val_mse": avg_loss}
 

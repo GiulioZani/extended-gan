@@ -12,8 +12,7 @@ import matplotlib.pyplot as plt
 import torchmetrics
 
 from .visualize import _visualize_predictions
-
-# from ..utils.visualize_predictions import visualize_predictions
+import mate
 
 
 class CoCycleGAN(LightningModule):
@@ -29,6 +28,7 @@ class CoCycleGAN(LightningModule):
         self.val_mse = torchmetrics.MeanSquaredError()
         self.ssim = torchmetrics.StructuralSimilarityIndexMeasure()
         self.train_ssim = torchmetrics.StructuralSimilarityIndexMeasure()
+        self.cache = mate.Cache(os.path.join(self.params.save_path, "mate.cache"))
 
         self.__cyclic_function = {
             "l1": F.l1_loss,
@@ -163,7 +163,7 @@ class CoCycleGAN(LightningModule):
         x, y = batch
         generator_loss = self.__generator_loss(x, y, batch_idx, flag="test")
         discriminator_loss = self.__discriminator_loss(x, y)
-        pred = self.forward( x, future=self.y_future)
+        pred = self.forward(x, future=self.y_future)
         mse_loss = F.mse_loss(pred, y)
 
         self.val_mse.update(pred.detach(), y.detach())
@@ -442,10 +442,15 @@ class CoCycleGAN(LightningModule):
         self.log("gen_loss", avg_gen_loss, prog_bar=True)
         self.log("disc_loss", avg_disc_loss, prog_bar=True)
 
+    def get_current_lr(self):
+        cur_lr = self.trainer.optimizers[0].param_groups[0]["lr"]
+        return cur_lr
+
     def configure_optimizers(self):
         lr = self.params.lr
         b1 = self.params.b1
         b2 = self.params.b2
+
 
         generator_optimizer = t.optim.Adam(
             self.generator.parameters(), lr=lr, betas=(b1, b2)
@@ -459,6 +464,9 @@ class CoCycleGAN(LightningModule):
             patience=self.params.reduce_lr_on_plateau_patience,
             verbose=True,
             factor=self.params.reduce_lr_on_plateau_factor,
+            threshold=self.params.reduce_lr_on_plateau_threshold,
+            mode="min",
+            threshold_mode="rel",
         )
         discriminator_scheduler = t.optim.lr_scheduler.ReduceLROnPlateau(
             discriminator_optimizer,

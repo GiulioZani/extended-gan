@@ -38,9 +38,9 @@ class Decoder(nn.Module):
         super(Decoder, self).__init__()
         strides = stride_generator(N_S, reverse=True)
         self.dec = nn.Sequential(
-            ConvSC(C_hid * 4 + hid_T, C_hid * 4, stride=strides[0], transpose=True),
-            ConvSC(C_hid * 4, C_hid * 2, stride=strides[1], transpose=True),
-            ConvSC(C_hid * 2, C_hid * 1, stride=strides[2], transpose=True),
+            ConvSC(C_hid * 2 + hid_T,hid_T, stride=strides[0], transpose=True),
+            ConvSC(hid_T, hid_T, stride=strides[1], transpose=True),
+            ConvSC(hid_T, C_hid * 1, stride=strides[2], transpose=True),
             *[ConvSC(C_hid, C_hid, stride=s, transpose=True) for s in strides[3:]],
             # ConvSC(C_hid, C_hid, stride=strides[-1], transpose=True)
         )
@@ -49,7 +49,7 @@ class Decoder(nn.Module):
     def forward(self, hid, enc1=None, skip=None, ySkip=None):
         # ipdb.set_trace()
         noise = torch.randn_like(hid)
-        hid = torch.cat([hid, noise, enc1, skip, ySkip], dim=1)
+        hid = torch.cat([hid, ySkip, enc1], dim=1)
         for i in range(0, len(self.dec)):
             hid = self.dec[i](hid)
         # Y = self.dec[-1](torch.cat([hid, enc1], dim=1))
@@ -197,7 +197,7 @@ class SimVP(nn.Module):
                 out = self.dec(hid[:, i, :, :, :], embed, skip_mean, skip_all)
                 outs.append(out)
                 # ipdb.set_trace()
-                z = torch.cat([x[:B, 1:, ...], out], 1)
+                z = torch.cat([x[:B, :1, ...], out], 1)
                 # z = self.embed(out, future)
                 # ipdb.set_trace()
                 embed = self.enc.skip(z)
@@ -206,7 +206,7 @@ class SimVP(nn.Module):
                 out = self.dec(hid[:, i, :, :, :], embed, skip_mean, skip_all)
                 # outs.insert(0, out)
                 outs.append(out)
-                z = torch.cat([x[:B, 1:, ...], out], 1)
+                z = torch.cat([x[:B, :1, ...], out], 1)
                 # z = self.embed(out, future)
                 embed = self.enc.skip(z)
 

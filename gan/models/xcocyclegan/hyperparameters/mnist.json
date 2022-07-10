@@ -17,6 +17,7 @@
 	"lr": 0.0002,
 	"b1": 0.5,
 	"b2": 0.999,
+	"reduce_lr_on_plateau_threshold": 0.1,
 	"gaussian_noise_std": 0.1,
 	"in_seq_len": 10,
 	"out_seq_len": 10,
@@ -29,7 +30,7 @@
 	"data_loader": "moving_mnist",
 	"data_threshold": 1000,
 	"save_interval": 100,
-	"output_activation":"tanh",
+	"output_activation": "tanh",
 	"hparams": {
 		"l1_pred_loss_weight": 10,
 		"l1_past_pred_loss_weight": 10,
