@@ -31,6 +31,18 @@ class ConvSC(nn.Module):
         y = self.conv(x)
         return y
 
+class ChanLayerNorm(nn.Module):
+    def __init__(self, dim, eps = 1e-5):
+        super().__init__()
+        self.eps = eps
+        self.g = nn.Parameter(torch.ones(1, dim, 1, 1))
+        self.b = nn.Parameter(torch.zeros(1, dim, 1, 1))
+
+    def forward(self, x):
+        std = torch.var(x, dim = 1, unbiased = False, keepdim = True).sqrt()
+        mean = torch.mean(x, dim = 1, keepdim = True)
+        return (x - mean) / (std + self.eps) * self.g + self.b
+
 
 class GroupConv2d(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size, stride, padding, groups, act_norm=False):
@@ -39,7 +51,7 @@ class GroupConv2d(nn.Module):
         if in_channels % groups != 0:
             groups = 1
         self.conv = nn.Conv2d(in_channels, out_channels, kernel_size=kernel_size, stride=stride, padding=padding,groups=groups)
-        self.norm = nn.GroupNorm(groups,out_channels)
+        self.norm = nn.GroupNorm(out_channels)
         self.activate = nn.LeakyReLU(0.2, inplace=True)
     
     def forward(self, x):
