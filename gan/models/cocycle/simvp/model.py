@@ -39,7 +39,7 @@ class Decoder(nn.Module):
         super(Decoder, self).__init__()
         strides = stride_generator(N_S, reverse=True)
         self.dec = nn.Sequential(
-            ConvSC(C_hid * 2 + hid_T + 2, hid_T, stride=strides[0], transpose=True),
+            ConvSC(C_hid * 2 + hid_T , hid_T, stride=strides[0], transpose=True),
             ConvSC(hid_T, hid_T, stride=strides[1], transpose=True),
             ConvSC(hid_T, C_hid * 1, stride=strides[2], transpose=True),
             *[ConvSC(C_hid, C_hid, stride=s, transpose=True) for s in strides[3:]],
@@ -100,13 +100,13 @@ class SimVP(nn.Module):
         embedding = self.time_embedding(labels)
         embedding = embedding.reshape(B, T, 1, H, W)
 
-        condition = t.tensor(future, device=x.device).int()
-        conditions = condition.repeat(B, 1)
-        conditions = self.conditional_embedding(conditions)
-        conditions = conditions.view(B, 1, 1, H, W)
-        conditions = conditions.repeat(1, T, 1, 1, 1)
+        # condition = t.tensor(future, device=x.device).int()
+        # conditions = condition.repeat(B, 1)
+        # conditions = self.conditional_embedding(conditions)
+        # conditions = conditions.view(B, 1, 1, H, W)
+        # conditions = conditions.repeat(1, T, 1, 1, 1)
 
-        return t.cat([x, embedding, conditions], dim=2)
+        return x + embedding
 
     def pos_emb(self, x, T: int):
         B, C, H, W = x.shape
@@ -165,6 +165,7 @@ class SimVP(nn.Module):
 
         outs = []
         embed = self.enc.skip(x_raw[:, -1 if future else 0, ...])
+        embed = self.pos_emb(embed, T if future else 0)
         if future:
             for i in range(T):
                 out = self.dec(hid[:, i, :, :, :], embed, skip_all)
