@@ -21,6 +21,7 @@ class BaseRegressionModel(LightningModule):
         loss = t.nn.MSELoss()
         self.loss = lambda x, y: loss(x.flatten(), y.flatten())  # t.nn.MSELoss()
         self.mse_metric = torchmetrics.MeanSquaredError()
+        self.ssim = mate.metrics.MovingSSIM()
         self.sum_mse = t.nn.MSELoss(reduction="sum")
 
         # self.denorm_mse = mate.DenormMSE()
@@ -56,6 +57,7 @@ class BaseRegressionModel(LightningModule):
         self.log("val_loss", avg_loss, prog_bar=True)
         self.log("val_sum_mse", avg_sum_mse, prog_bar=True)
 
+
         return {"val_mse": avg_loss}
 
     def training_epoch_end(self, outputs):
@@ -76,8 +78,6 @@ class BaseRegressionModel(LightningModule):
         y = y.cpu()
         pred_y = self(x).cpu()
         loss = F.mse_loss(pred_y, y)
-        # sum_mse = self.mse_sum_loss(pred_y, y)
-        # self.log("val_mse", loss, prog_bar=True)
         sum_mse = F.mse_loss(pred_y, y, reduction="sum")
         return {"val_mse": loss, "val_loss": loss, "val_sum_mse": sum_mse}
 
@@ -94,6 +94,9 @@ class BaseRegressionModel(LightningModule):
             )
 
         pred_y = self(x)
+
+        self.ssim.update(y, pred_y)
+
         # se = F.mse_loss(pred_y, y, reduction="sum")
         self.mse_metric.update(y, pred_y)
         sum_mse = F.mse_loss(pred_y, y, reduction="sum")
@@ -105,6 +108,11 @@ class BaseRegressionModel(LightningModule):
         self.log("test_mse", loss, prog_bar=True)
         self.mse_metric.reset()
         self.log("test_sum_mse", avg_test_mse, prog_bar=True)
+
+        ssim = self.ssim.compute()
+        self.log("test_ssim", ssim, prog_bar=True)
+        self.ssim.reset()
+
         return {"test_mse": loss}
 
     def configure_optimizers(self):

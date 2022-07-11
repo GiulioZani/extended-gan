@@ -41,18 +41,18 @@ class Decoder(nn.Module):
         self.dec = nn.Sequential(
             ConvSC(C_hid * 2 + hid_T, hid_T, stride=strides[0], transpose=True),
             *[ConvSC(hid_T, hid_T, stride=s, transpose=True) for s in strides[1:-1]],
-            ConvSC(hid_T, C_hid, stride=strides[-1], transpose=True),
+            ConvSC(hid_T + C_hid, C_hid, stride=strides[-1], transpose=True),
         )
         self.readout = nn.Conv2d(C_hid, C_out, 1)
 
-    def forward(self, hid, skip_before=None, skilp_all=None, skip_first=None):
+    def forward(self, hid, skip_before=None, skilp_all=None, skip_last=None):
         # ipdb.set_trace()
         # noise = torch.randn_like(hid)
         hid = torch.cat([hid, skilp_all, skip_before], dim=1)
-        for i in range(0, len(self.dec)):
+        for i in range(0, len(self.dec) - 1):
             hid = self.dec[i](hid)
-        # Y = self.dec[-1](torch.cat([hid, skip_first], dim=1))
-        Y = self.readout(hid)
+        Y = self.dec[-1](torch.cat([hid, skip_last], dim=1))
+        Y = self.readout(Y)
         return Y
 
 
@@ -232,7 +232,7 @@ class SimVP(nn.Module):
         outs = []
         embed = self.enc.skip(x_raw[:, -1 if future else 0, ...])
         embed = self.pos_emb(embed, T if future else 0)
-        skip_first = None  # self.enc.skip_first(x_raw[:, -1 if future else 0, ...])
+        skip_first = self.enc.skip_first(x_raw[:, -1 if future else 0, ...])
         # skip_first = self.pos_emb(skip_first, T if future else 0)
 
         if future:
@@ -246,7 +246,7 @@ class SimVP(nn.Module):
                 # ipdb.set_trace()
                 embed = self.enc.skip(out)
                 embed = self.pos_emb(embed, T + i + 1)
-                # skip_first = self.enc.skip_first(out)
+                skip_first = self.enc.skip_first(out)
         else:
             for i in range(T - 1, -1, -1):
                 input = self.pos_emb(hid[:, i, ...], i)
@@ -256,6 +256,7 @@ class SimVP(nn.Module):
                 z = torch.cat([x[:B, :1, ...], out], 1)
                 # z = self.embed(out, future)
                 embed = self.enc.skip(z)
+                
 
             # reverse outs array
             # ipdb.set_trace()

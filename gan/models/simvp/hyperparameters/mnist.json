@@ -8,7 +8,7 @@
 			"type": "reduce_on_plateau",
 			"mode": "min",
 			"verbose": true,
-			"threshold": 1e-2,
+			"threshold": 1e-1,
 			"threshold_mode": "rel",
 			"patience": 0,
 			"factor": 0.5,
