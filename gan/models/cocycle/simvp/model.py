@@ -24,14 +24,17 @@ class Encoder(nn.Module):
         )
 
     def forward(self, x):  # B*4, 3, 128, 128
-        enc1 = self.enc[0](x)
-        latent = enc1
-        for i in range(1, len(self.enc)):
-            latent = self.enc[i](latent)
-        return latent
+        # enc1 = self.enc[0](x)
+        # latent = enc1
+        # for i in range(1, len(self.enc)):
+        #     latent = self.enc[i](latent)
+        return self.enc(x)
 
     def skip(self, x):
         return self.forward(x)
+
+    def skip_first(self, x):
+        return self.enc[0](x)
 
 
 class Decoder(nn.Module):
@@ -39,19 +42,19 @@ class Decoder(nn.Module):
         super(Decoder, self).__init__()
         strides = stride_generator(N_S, reverse=True)
         self.dec = nn.Sequential(
-            ConvSC(C_hid * 2 + hid_T , hid_T, stride=strides[0], transpose=True),
+            ConvSC(C_hid * 2 + hid_T, hid_T, stride=strides[0], transpose=True),
             ConvSC(hid_T, hid_T, stride=strides[1], transpose=True),
             ConvSC(hid_T, C_hid * 1, stride=strides[2], transpose=True),
-            *[ConvSC(C_hid, C_hid, stride=s, transpose=True) for s in strides[3:]],
-            # ConvSC(C_hid, C_hid, stride=strides[-1], transpose=True)
+            *[ConvSC(C_hid, C_hid, stride=s, transpose=True) for s in strides[3:-1]],
+            ConvSC(C_hid * 2, C_hid, stride=strides[-1], transpose=True),
         )
         self.readout = nn.Conv2d(C_hid, C_out, 1)
 
-    def forward(self, hid, enc1=None, ySkip=None):
+    def forward(self, hid, enc1=None, ySkip=None, last_skip=None):
         hid = t.cat([hid, ySkip, enc1], dim=1)
-        for i in range(0, len(self.dec)):
+        for i in range(0, len(self.dec) - 1):
             hid = self.dec[i](hid)
-        # Y = self.dec[-1](t.cat([hid, enc1], dim=1))
+        Y = self.dec[-1](t.cat([hid, last_skip], dim=1))
         Y = self.readout(hid)
         return Y
 
@@ -166,23 +169,27 @@ class SimVP(nn.Module):
         outs = []
         embed = self.enc.skip(x_raw[:, -1 if future else 0, ...])
         embed = self.pos_emb(embed, T if future else 0)
+        last_skip = self.enc.skip_first(x_raw[:, -1 if future else 0, ...])
+
         if future:
             for i in range(T):
-                out = self.dec(hid[:, i, :, :, :], embed, skip_all)
+                out = self.dec(hid[:, i, :, :, :], embed, skip_all, last_skip)
                 outs.append(out)
                 # ipdb.set_trace()
                 # z = t.cat([x[:B, :1, ...], out], 1)
                 # z = self.embed(out, future)
                 # ipdb.set_trace()
+                last_skip = self.enc.skip_first(out)
                 embed = self.enc.skip(out)
                 embed = self.pos_emb(embed, T + i)
         else:
             for i in range(T - 1, -1, -1):
-                out = self.dec(hid[:, i, :, :, :], embed, skip_all)
+                out = self.dec(hid[:, i, :, :, :], embed, skip_all, last_skip)
                 # outs.insert(0, out)
                 outs.append(out)
                 # z = t.cat([x[:B, :1, ...], out], 1)
                 # z = self.embed(out, future)
+                last_skip = self.enc.skip_first(out)
                 embed = self.enc.skip(out)
                 embed = self.pos_emb(embed, T - i - 1)
 
