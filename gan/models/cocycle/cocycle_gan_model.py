@@ -179,8 +179,8 @@ class CoCycleGAN(LightningModule):
 
         pred_y = self.generator(x, future=self.y_future)
         pred_x = self.generator(y, future=self.x_future)
-        cycle_x = self.generator(pred_y, future=self.x_future)
-        cycle_y = self.generator(pred_x, future=self.y_future)
+        # cycle_x = self.generator(pred_y, future=self.x_future)
+        # cycle_y = self.generator(pred_x, future=self.y_future)
 
         pred_y_loss = F.mse_loss(pred_y, y)
         pred_x_loss = F.mse_loss(pred_x, x)
