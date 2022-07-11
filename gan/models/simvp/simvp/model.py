@@ -235,6 +235,7 @@ class SimVP(nn.Module):
         embed = self.enc.skip(x_raw[:, -1 if future else 0, ...])
         embed = self.pos_emb(embed, T if future else 0)
         skip_first = self.enc.skip_first(x_raw[:, -1 if future else 0, ...])
+        # skip_first = self.pos_emb(skip_first, T if future else 0)
 
         if future:
             for i in range(T):
