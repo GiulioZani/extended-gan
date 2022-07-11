@@ -51,7 +51,7 @@ class GroupConv2d(nn.Module):
         if in_channels % groups != 0:
             groups = 1
         self.conv = nn.Conv2d(in_channels, out_channels, kernel_size=kernel_size, stride=stride, padding=padding,groups=groups)
-        self.norm = nn.GroupNorm(out_channels)
+        self.norm = nn.GroupNorm(groups, out_channels)
         self.activate = nn.LeakyReLU(0.2, inplace=True)
     
     def forward(self, x):
