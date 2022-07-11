@@ -5,7 +5,7 @@ from .convlstm.ConvLSTMModule import ConvLSTMClassifier
 from .conv2d.conv2dmodel import FrameDiscriminator
 from .resnet.resnet3d import ResNet3DClassifier
 from .resnet.resnetmodel import ResNetFrameDiscriminator, ResNetTemproalDiscriminator
-from .simvp.model import SimVP, SimVPTemporalDiscriminator
+from .simvp.model import SimVP
 from .axial.axial import AxialDiscriminator
 
 

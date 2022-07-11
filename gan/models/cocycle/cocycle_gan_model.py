@@ -20,9 +20,7 @@ class CoCycleGAN(LightningModule):
     def __init__(self, params: Namespace):
         super().__init__()  # params)
         self.params = params
-        self.embedding = nn.Embedding(2, self.params.imsize**2)
-        # self.fake_y_detached = t.tensor(0.0)
-        # self.fake_x_detached = t.tensor(0.0)
+
         self.generator = nn.Sequential()
         self.discriminator = nn.Sequential()
         self.best_val_loss = float("inf")
@@ -37,45 +35,23 @@ class CoCycleGAN(LightningModule):
             (t.tensor(0), t.tensor(0), t.tensor(0)),
         ]
 
-    def forward(self, x: t.Tensor):
-        return self.generator(x)
+    def forward(self, x: t.Tensor, future: bool = False) -> t.Tensor:
+        return self.generator(x, future=future)
 
-    def __embed(self, x: t.Tensor, *, future: bool):
-        label = t.tensor(future, device=self.device).int()
-        embedded_label = self.embedding(label)
-        # .repeat(
-        #    self.params.imsize ** 2
-        # )
-        """
-        embedding = (
-            embedded_label
-            .view(self.params.imsize, self.params.imsize)
-            .repeat((x.shape[0], x.shape[1], 1, 1))
-            .unsqueeze(2)
-        ).to(self.device)
-        """
-        embedding = embedded_label.view(self.params.imsize, self.params.imsize)
-        if len(x.shape) == 4:
-            embedding = embedding.repeat((x.shape[0], 1, 1, 1)).to(self.device)
-        elif len(x.shape) == 5:
-            embedding = embedding.repeat((x.shape[0], x.shape[1], 1, 1, 1)).to(
-                self.device
-            )
-        return t.cat((embedding, x), dim=self.params.channel_dim)
 
     def __unembed(self, x: t.Tensor) -> t.Tensor:
         return x[:, 1:]
 
     def __visualize_predictions(self, x, y, flag):
         future = self.y_future
-        fake_y = self.generator(self.__embed(x, future=future))
-        fake_x = self.generator(self.__embed(fake_y, future=not future))
+        fake_y = self.generator(x, future=future)
+        fake_x = self.generator(fake_y, future=not future)
 
         _visualize_predictions(
             x,
             y,
             fake_y,
-            self.generator(self.__embed(y, future=self.x_future)),
+            self.generator(y, future=self.x_future),
             fake_x,
             self.current_epoch,
             self.params.save_path,
@@ -84,6 +60,7 @@ class CoCycleGAN(LightningModule):
 
     def __save_model(self):
         # run on thread
+        return
         thread = threading.Thread(
             target=lambda: t.save(
                 self.state_dict(),
@@ -96,7 +73,7 @@ class CoCycleGAN(LightningModule):
     def validation_step(self, batch: tuple[t.Tensor, t.Tensor], batch_idx: int):
         x, y = batch
         generator_loss = self.__generator_loss(x, y, batch_idx, flag="val")
-        pred = self.generator(self.__embed(x, future=self.y_future))
+        pred = self.generator(x, future=self.y_future)
         mse_loss = F.mse_loss(pred, y)
         self.val_mse.update(pred.detach(), y.detach())
 
@@ -131,7 +108,7 @@ class CoCycleGAN(LightningModule):
     def test_step(self, batch: tuple[t.Tensor, t.Tensor], batch_idx: int):
         x, y = batch
         generator_loss = self.__generator_loss(x, y, batch_idx, flag="test")
-        pred = self.generator(self.__embed(x, future=self.y_future))
+        pred = self.generator(x, future=self.y_future)
         mse_loss = F.mse_loss(pred, y)
 
         self.val_mse.update(pred.detach(), y.detach())
@@ -171,14 +148,14 @@ class CoCycleGAN(LightningModule):
         if visualize:
             self.__visualize_predictions(x, y, flag)
 
-        pred_y = self.generator(self.__embed(x, future=self.y_future))
-        fake_x = self.generator(self.__embed(pred_y, future=self.x_future))
-        pred_x = self.generator(self.__embed(y, future=self.x_future))
-        cycle_y = self.generator(self.__embed(pred_x, future=self.y_future))
+        pred_y = self.generator(x, future=self.y_future)
+        pred_x = self.generator(y, future=self.x_future)
+        cycle_x = self.generator(pred_y, future=self.x_future)
+        cycle_y = self.generator(pred_x, future=self.y_future)
 
         pred_y_l1 = F.mse_loss(pred_y, y)
         pred_x_l1 = F.mse_loss(pred_x, x)
-        pred_cycle_l1 = F.mse_loss(fake_x, x)
+        pred_cycle_l1 = F.mse_loss(cycle_x, x)
         pred_y_cycle_l1 = F.mse_loss(cycle_y, y)
 
         mse_sum_pred_y_loss = F.mse_loss(pred_y, y, reduction="sum")
@@ -209,7 +186,7 @@ class CoCycleGAN(LightningModule):
             # save the model on a thread
             self.__save_model()
 
-        pred = self.generator(self.__embed(x, future=self.y_future))
+        pred = self.generator(x, future=self.y_future)
         mse_loss = F.mse_loss(pred, y)
         self.log("mse_loss", mse_loss, prog_bar=True)
         loss = self.__generator_loss(x, y, batch_idx, flag="train")

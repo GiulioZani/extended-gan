@@ -1,8 +1,9 @@
 import imp
 import torch
 from torch import nn
-from .modules import ConvSC, Inception
+from .modules import ConvSC, Inception, Mid_Xnet
 import ipdb
+import torch as t
 
 
 def stride_generator(N, reverse=False):
@@ -19,7 +20,7 @@ class Encoder(nn.Module):
         strides = stride_generator(N_S)
         self.enc = nn.Sequential(
             ConvSC(C_in, C_hid, stride=strides[0]),
-            *[ConvSC(C_hid, C_hid, stride=s) for s in strides[1:]]
+            *[ConvSC(C_hid, C_hid, stride=s) for s in strides[1:]],
         )
 
     def forward(self, x):  # B*4, 3, 128, 128
@@ -27,116 +28,32 @@ class Encoder(nn.Module):
         latent = enc1
         for i in range(1, len(self.enc)):
             latent = self.enc[i](latent)
-        return latent, enc1
+        return latent
+
+    def skip(self, x):
+        return self.forward(x)
 
 
 class Decoder(nn.Module):
-    def __init__(self, C_hid, C_out, N_S):
+    def __init__(self, C_hid, hid_T, C_out, N_S):
         super(Decoder, self).__init__()
         strides = stride_generator(N_S, reverse=True)
         self.dec = nn.Sequential(
-            *[ConvSC(C_hid, C_hid, stride=s, transpose=True) for s in strides[:-1]],
-            ConvSC( C_hid, C_hid, stride=strides[-1], transpose=True)
+            ConvSC(C_hid * 2 + hid_T + 2, hid_T, stride=strides[0], transpose=True),
+            ConvSC(hid_T, hid_T, stride=strides[1], transpose=True),
+            ConvSC(hid_T, C_hid * 1, stride=strides[2], transpose=True),
+            *[ConvSC(C_hid, C_hid, stride=s, transpose=True) for s in strides[3:]],
+            # ConvSC(C_hid, C_hid, stride=strides[-1], transpose=True)
         )
         self.readout = nn.Conv2d(C_hid, C_out, 1)
 
-    def forward(self, hid, enc1=None):
+    def forward(self, hid, enc1=None, ySkip=None):
+        hid = t.cat([hid, ySkip, enc1], dim=1)
         for i in range(0, len(self.dec)):
             hid = self.dec[i](hid)
-        # Y = self.dec[-1](torch.cat([hid, enc1], dim=1))
+        # Y = self.dec[-1](t.cat([hid, enc1], dim=1))
         Y = self.readout(hid)
         return Y
-
-
-class Mid_Xnet(nn.Module):
-    def __init__(self, channel_in, channel_hid, N_T, incep_ker=[3, 5, 7, 11], groups=8):
-        super(Mid_Xnet, self).__init__()
-
-        self.N_T = N_T
-        enc_layers = [
-            Inception(
-                channel_in,
-                channel_hid // 2,
-                channel_hid,
-                incep_ker=incep_ker,
-                groups=groups,
-            )
-        ]
-        for i in range(1, N_T - 1):
-            enc_layers.append(
-                Inception(
-                    channel_hid,
-                    channel_hid // 2,
-                    channel_hid,
-                    incep_ker=incep_ker,
-                    groups=groups,
-                )
-            )
-        enc_layers.append(
-            Inception(
-                channel_hid,
-                channel_hid // 2,
-                channel_hid,
-                incep_ker=incep_ker,
-                groups=groups,
-            )
-        )
-
-        dec_layers = [
-            Inception(
-                channel_hid,
-                channel_hid // 2,
-                channel_hid,
-                incep_ker=incep_ker,
-                groups=groups,
-            )
-        ]
-        for i in range(1, N_T - 1):
-            dec_layers.append(
-                Inception(
-                    2 * channel_hid,
-                    channel_hid // 2,
-                    channel_hid,
-                    incep_ker=incep_ker,
-                    groups=groups,
-                )
-            )
-        dec_layers.append(
-            Inception(
-                2 * channel_hid,
-                channel_hid // 2,
-                channel_in,
-                incep_ker=incep_ker,
-                groups=groups,
-            )
-        )
-
-        self.enc = nn.Sequential(*enc_layers)
-        self.dec = nn.Sequential(*dec_layers)
-
-    def forward(self, x):
-        B, T, C, H, W = x.shape
-        x = x.reshape(B, T * C, H, W)
-
-        # encoder
-        skips = []
-        z = x
-        for i in range(self.N_T):
-            z = self.enc[i](z)
-            if i < self.N_T - 1:
-                skips.append(z)
-
-        # decoder
-        z = self.dec[0](z)
-        for i in range(1, self.N_T):
-            z = self.dec[i](torch.cat([z, skips[-i]], dim=1))
-
-        y = z.reshape(B, T, C, H, W)
-        return y
-
-
-from ..axial.axial import AxialLayers
-from axial_attention import AxialPositionalEmbedding
 
 
 class SimVP(nn.Module):
@@ -155,78 +72,124 @@ class SimVP(nn.Module):
         self.params = params
         shape_in = (params.in_seq_len, params.n_channels)
         T, C = shape_in
-        self.enc = Encoder(C + 1, hid_S, N_S)
+        self.enc = Encoder(C, hid_S, N_S)
         self.hid = Mid_Xnet(T * hid_S, hid_T, N_T, incep_ker, groups)
-        # self.attn = AxialLayers(hid_S, 3, 4, dropout=0.0, num_heads=32, residual=False)
-        # self.s_attn = AxialLayers(hid_S, 3, 8, dropout=0.3, residual=True)
-        # self.pos_emb = AxialPositionalEmbedding(
-        #     hid_S, (10, params.imsize // 4, params.imsize // 4), 2
-        # )
+        self.dec = Decoder(hid_S, hid_T, C, N_S)
+        self.conditional_embedding = nn.Embedding(2, (self.params.imsize // 4) ** 2)
+        self.time_embedding = nn.Embedding(T * 2 + 5, (self.params.imsize // 4) ** 2)
+        # self.future = t.tensor(True).int()
 
-        self.dec = Decoder(hid_S, C, N_S)
+    def time_embed(self, x, time_stamps):
+        B, T, C, H, W = x.shape
 
-    def forward(self, x_raw):
+        label = t.tensor(time_stamps, device=x.device).int()
+        labels = label.repeat(B, 1)
+
+        embedding = self.time_embedding(labels)
+        embedding = embedding.reshape(B, T, 1, H, W)
+        return x + embedding
+
+    def embed(self, x, future: bool):
+        B, T, C, H, W = x.shape
+
+        label = t.tensor(
+            [T if future else 0 + i for i in range(T)], device=x.device
+        ).int()
+        labels = label.repeat(B, 1)
+
+        embedding = self.time_embedding(labels)
+        embedding = embedding.reshape(B, T, 1, H, W)
+
+        condition = t.tensor(future, device=x.device).int()
+        conditions = condition.repeat(B, 1)
+        conditions = self.conditional_embedding(conditions)
+        conditions = conditions.view(B, 1, 1, H, W)
+        conditions = conditions.repeat(1, T, 1, 1, 1)
+
+        return t.cat([x, embedding, conditions], dim=2)
+
+    def pos_emb(self, x, T: int):
+        B, C, H, W = x.shape
+        # B of T tensor
+
+        label = t.tensor(T, device=x.device).int()
+        labels = label.repeat(B, 1)
+        # ipdb.set_trace()
+
+        embedding = self.time_embedding(labels)
+        embedding = embedding.reshape(B, 1, H, W)
+        embedding = embedding.repeat(1, C, 1, 1)
+        return x + embedding
+
+    def conditional_emb(self, x, future=True):
+        B, C, H, W = x.shape
+        # B of T tensor
+        label = t.tensor(future, device=x.device).int()
+        labels = label.repeat(B, 1)
+        # ipdb.set_trace()
+
+        embedding = self.conditional_embedding(labels)
+        embedding = embedding.reshape(B, 1, H, W)
+        embedding = embedding.repeat(1, C, 1, 1)
+        return x + embedding
+
+    def forward(self, x_raw, future=True):
+
+        # ipdb.set_trace()
         B, T, C, H, W = x_raw.shape
+
         x = x_raw.view(B * T, C, H, W)
 
-        embed, skip = self.enc(x)
+        embed = self.enc(x)
         _, C_, H_, W_ = embed.shape
 
         z = embed.view(B, T, C_, H_, W_)
         # ipdb.set_trace()
         # z = self.pos_emb(z)
+        z = self.time_embed(z, [0 if future else T + i for i in range(T)])
+        # hid = self.hid(z)
+        hid, skip_all = self.hid(z)
+        # ipdb.set_trace()
 
-        hid = self.hid(z)
-        # hid = self.attn(z)
+        # for i in range(T):
 
-        hid = hid.reshape(B * T, C_, H_, W_)
+        #     hid[:, i, :, :, :] = self.pos_emb(
+        #         hid[:, i, :, :, :], i if future else T - i - 1
+        #     )
+        hid = self.embed(hid, future)
+        # hid = hid.view(B * T, C_, H_, W_)
+        # hid = self.conditional_emb(hid, future=future)
+        # hid = hid.view(B, T, C_, H_, W_)
 
-        Y = self.dec(hid, skip)
-        Y = Y.reshape(B, T, C - 1, H, W)
-        Y = torch.tanh(Y)
-        return Y
+        # skip_mean = hid.mean(dim=1)
 
+        outs = []
+        embed = self.enc.skip(x_raw[:, -1 if future else 0, ...])
+        if future:
+            for i in range(T):
+                out = self.dec(hid[:, i, :, :, :], embed, skip_all)
+                outs.append(out)
+                # ipdb.set_trace()
+                # z = t.cat([x[:B, :1, ...], out], 1)
+                # z = self.embed(out, future)
+                # ipdb.set_trace()
+                embed = self.enc.skip(out)
+                embed = self.pos_emb(embed, T + i)
+        else:
+            for i in range(T - 1, -1, -1):
+                out = self.dec(hid[:, i, :, :, :], embed, skip_all)
+                # outs.insert(0, out)
+                outs.append(out)
+                # z = t.cat([x[:B, :1, ...], out], 1)
+                # z = self.embed(out, future)
+                embed = self.enc.skip(out)
+                embed = self.pos_emb(embed, T - i - 1)
 
-class SimVPTemporalDiscriminator(nn.Module):
-    def __init__(
-        self,
-        params,
-        shape_in=(10, 1),
-        hid_S=16,
-        hid_T=256,
-        N_S=4,
-        N_T=8,
-        incep_ker=[3, 5, 7, 11],
-        groups=8,
-    ):
-        super(SimVPTemporalDiscriminator, self).__init__()
-        self.params = params
-        shape_in = (params.in_seq_len + params.out_seq_len, params.n_channels)
-        T, C = shape_in
-        self.enc = Encoder(C, hid_S, N_S)
-        self.hid = Mid_Xnet(T * hid_S, hid_T, N_T, incep_ker, groups)
-        self.dec = Decoder(hid_S, C, N_S)
+            # reverse outs array
+            # ipdb.set_trace()
+            outs = outs[::-1]
 
-        self.classifier = nn.Sequential(
-            nn.Flatten(), nn.Linear(params.imsize**2, 1), nn.Sigmoid()
-        )
-
-    def forward(self, x_raw):
-        B, T, C, H, W = x_raw.shape
-        x = x_raw.view(B * T, C, H, W)
-
-        embed, skip = self.enc(x)
-        _, C_, H_, W_ = embed.shape
-
-        z = embed.view(B, T, C_, H_, W_)
-        hid = self.hid(z)
-
-        max = torch.max(hid, dim=1)
-        return self.classifier(max[0])
-
-        hid = hid.reshape(B * T, C_, H_, W_)
-
-        Y = self.dec(hid, skip)
+        Y = t.stack(outs, dim=1)
         Y = Y.reshape(B, T, C, H, W)
-        Y = torch.tanh(Y)
+        Y = t.tanh(Y)
         return Y
