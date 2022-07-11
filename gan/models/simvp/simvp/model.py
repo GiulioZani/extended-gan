@@ -52,7 +52,7 @@ class Decoder(nn.Module):
         for i in range(0, len(self.dec)):
             hid = self.dec[i](hid)
         # Y = self.dec[-1](torch.cat([hid, skip_first], dim=1))
-        Y = self.readout(Y)
+        Y = self.readout(hid)
         return Y
 
 
@@ -232,7 +232,7 @@ class SimVP(nn.Module):
         outs = []
         embed = self.enc.skip(x_raw[:, -1 if future else 0, ...])
         embed = self.pos_emb(embed, T if future else 0)
-        skip_first = None #self.enc.skip_first(x_raw[:, -1 if future else 0, ...])
+        skip_first = None  # self.enc.skip_first(x_raw[:, -1 if future else 0, ...])
         # skip_first = self.pos_emb(skip_first, T if future else 0)
 
         if future:
