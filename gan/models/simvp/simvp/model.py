@@ -51,7 +51,7 @@ class Decoder(nn.Module):
         # ipdb.set_trace()
         # noise = torch.randn_like(hid)
         hid = torch.cat([hid, skilp_all, skip_before], dim=1)
-        for i in range(0, len(self.dec)-1):
+        for i in range(0, len(self.dec) - 1):
             hid = self.dec[i](hid)
         Y = self.dec[-1](torch.cat([hid, skip_first], dim=1))
         Y = self.readout(hid)
@@ -173,11 +173,12 @@ class SimVP(nn.Module):
         # self.pos_emb = AxialPositionalEmbedding(
         #     hid_S, (10, params.imsize // 4, params.imsize // 4), 2
         # )
-        self.embedding = nn.Embedding(T, (self.params.imsize // 4) ** 2)
+        self.embedding = nn.Embedding(T * 2 + 5, (self.params.imsize // 4) ** 2)
 
         self.dec = Decoder(hid_S, hid_T, C, N_S)
 
     def pos_emb(self, x, T):
+        # ipdb.set_trace()
         B, C, H, W = x.shape
         # B of T tensor
 
@@ -190,6 +191,26 @@ class SimVP(nn.Module):
         embedding = embedding.repeat(1, C, 1, 1)
         return x + embedding
 
+    def time_embed(self, x):
+        B, T, C, H, W = x.shape
+
+        label = t.tensor([i for i in range(T)], device=x.device).int()
+        labels = label.repeat(B, 1)
+
+        embedding = self.embedding(labels)
+        embedding = embedding.reshape(B, T, 1, H, W)
+        return x + embedding
+
+    def future_embed(self, x):
+        B, T, C, H, W = x.shape
+
+        label = t.tensor([i + 10 for i in range(T)], device=x.device).int()
+        labels = label.repeat(B, 1)
+
+        embedding = self.embedding(labels)
+        embedding = embedding.reshape(B, T, 1, H, W)
+        return x + embedding
+
     def forward(self, x_raw, future=True):
         B, T, C, H, W = x_raw.shape
         x = x_raw.view(B * T, C, H, W)
@@ -197,31 +218,35 @@ class SimVP(nn.Module):
         embed = self.enc(x)
         _, C_, H_, W_ = embed.shape
 
+        # embed = self.time_embed(embed)
         z = embed.view(B, T, C_, H_, W_)
-
+        z = self.time_embed(z)
         # positionally embed z
 
         hid, skip_all = self.hid(z)
 
-        for i in range(T):
-            hid[:, i, :, :, :] = self.pos_emb(
-                hid[:, i, :, :, :], i if future else T - i - 1
-            )
+        # for i in range(T):
+        #     hid[:, i, :, :, :] = self.pos_emb(
+        #         hid[:, i, :, :, :], i if future else T - i - 1
+        #     )
+        hid = self.future_embed(hid)
 
         outs = []
         embed = self.enc.skip(x_raw[:, -1 if future else 0, ...])
+        embed = self.pos_emb(embed, T if future else 0)
         skip_first = self.enc.skip_first(x_raw[:, -1 if future else 0, ...])
 
         if future:
             for i in range(T):
-                input = self.pos_emb(hid[:, i, ...], i)
-                out = self.dec(input, embed, skip_all, skip_first)
+                # input = self.pos_emb(hid[:, i, ...], i)
+                out = self.dec(hid[:, i, ...], embed, skip_all, skip_first)
                 outs.append(out)
                 # ipdb.set_trace()
                 # z = torch.cat([x[:B, :1, ...], out], 1)
                 # z = self.embed(out, future)
                 # ipdb.set_trace()
                 embed = self.enc.skip(out)
+                embed = self.pos_emb(embed, T + i + 1)
                 skip_first = self.enc.skip_first(out)
         else:
             for i in range(T - 1, -1, -1):
