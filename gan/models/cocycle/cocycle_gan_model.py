@@ -138,30 +138,30 @@ class CoCycleGAN(LightningModule):
 
         pred_y = self.generator(x, future=self.y_future)
         pred_x = self.generator(y, future=self.x_future)
-        cycle_x = self.generator(pred_y, future=self.x_future)
-        cycle_y = self.generator(pred_x, future=self.y_future)
+        # cycle_x = self.generator(pred_y, future=self.x_future)
+        # cycle_y = self.generator(pred_x, future=self.y_future)
 
         pred_y_l1 = F.mse_loss(pred_y, y)
         pred_x_l1 = F.mse_loss(pred_x, x)
-        pred_cycle_l1 = F.l1_loss(cycle_x, x)
-        pred_y_cycle_l1 = F.l1_loss(cycle_y, y)
+        # pred_cycle_l1 = F.l1_loss(cycle_x, x)
+        # pred_y_cycle_l1 = F.l1_loss(cycle_y, y)
 
-        mse_sum_pred_y_loss = F.mse_loss(pred_y, y, reduction="sum")
+        # mse_sum_pred_y_loss = F.mse_loss(pred_y, y, reduction="sum")
 
-        self.log("CoCycleLoss/pred_y_l1", pred_y_l1)
+        # self.log("CoCycleLoss/pred_y_l1", pred_y_l1)
 
-        self.log("CoCycleLoss/pred_y", pred_y_l1)
-        self.log("CoCycleLoss/pred_x", pred_x_l1)
-        self.log("CoCycleLoss/pred_cycle", pred_cycle_l1)
-        self.log("CoCycleLoss/pred_y_cycle", pred_y_cycle_l1)
-        self.log("CoCycleLoss/mse_sum_pred_y", mse_sum_pred_y_loss / 10)
+        # self.log("CoCycleLoss/pred_y", pred_y_l1)
+        # self.log("CoCycleLoss/pred_x", pred_x_l1)
+        # self.log("CoCycleLoss/pred_cycle", pred_cycle_l1)
+        # self.log("CoCycleLoss/pred_y_cycle", pred_y_cycle_l1)
+        # self.log("CoCycleLoss/mse_sum_pred_y", mse_sum_pred_y_loss / 10)
 
-        return (
-            +self.params.hparams["l1_cyclic_loss_weight"]
-            * (pred_cycle_l1 + pred_y_cycle_l1)
-            + self.params.hparams["l1_pred_loss_weight"] * pred_y_l1
-            + self.params.hparams["l1_past_pred_loss_weight"] * pred_x_l1
-        )
+        # return (
+        #     +self.params.hparams["l1_cyclic_loss_weight"]
+        #     * (pred_cycle_l1 + pred_y_cycle_l1)
+        #     + self.params.hparams["l1_pred_loss_weight"] * pred_y_l1
+        #     + self.params.hparams["l1_past_pred_loss_weight"] * pred_x_l1
+        # )
 
     def training_step(
         self,
@@ -184,12 +184,12 @@ class CoCycleGAN(LightningModule):
 
         pred_y_loss = F.mse_loss(pred_y, y)
         pred_x_loss = F.mse_loss(pred_x, x)
-        pred_cycle_loss = F.mse_loss(cycle_x, x)
-        pred_y_cycle_loss = F.mse_loss(cycle_y, y)
+        # pred_cycle_loss = F.mse_loss(cycle_x, x)
+        # pred_y_cycle_loss = F.mse_loss(cycle_y, y)
 
         loss = (
-            self.params.hparams.l1_cyclic_loss_weight
-            * (pred_cycle_loss + pred_y_cycle_loss)
+            # self.params.hparams.l1_cyclic_loss_weight
+            # * (pred_cycle_loss + pred_y_cycle_loss)
             + self.params.hparams.l1_pred_loss_weight * pred_y_loss
             + self.params.hparams.l1_past_pred_loss_weight * pred_x_loss
         )
