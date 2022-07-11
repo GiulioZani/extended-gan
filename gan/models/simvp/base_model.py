@@ -21,6 +21,9 @@ class BaseRegressionModel(LightningModule):
         loss = t.nn.MSELoss()
         self.loss = lambda x, y: loss(x.flatten(), y.flatten())  # t.nn.MSELoss()
         self.mse_metric = torchmetrics.MeanSquaredError()
+        self.sum_mse = t.nn.MSELoss(reduction="sum")
+
+        self.denorm_mse = mate.DenormMSE()
 
     def forward(self, z: t.Tensor) -> t.Tensor:
         out = self.generator(z)
@@ -46,10 +49,10 @@ class BaseRegressionModel(LightningModule):
     def validation_epoch_end(self, outputs):
         avg_loss = t.stack([x["val_loss"] for x in outputs]).mean()
         self.log("val_loss", avg_loss, prog_bar=True)
-        # t.save(
-        #     self.state_dict(),
-        #     os.path.join(self.params.save_path, "model.pt"),
-        # )
+
+        denorm_mse = self.denorm_mse.compute()
+        self.denorm_mse.reset()
+        self.log("val_denorm_mse", denorm_mse, prog_bar=True)
 
         return {"val_mse": avg_loss}
 
@@ -71,7 +74,10 @@ class BaseRegressionModel(LightningModule):
         y = y.cpu()
         pred_y = self(x).cpu()
         loss = F.mse_loss(pred_y, y)
+        # sum_mse = self.mse_sum_loss(pred_y, y)
         # self.log("val_mse", loss, prog_bar=True)
+        self.denorm_mse.update(y, pred_y)
+
         return {"val_mse": loss, "val_loss": loss}
 
     def test_step(self, batch: tuple[t.Tensor, t.Tensor], batch_idx: int):
@@ -89,12 +95,17 @@ class BaseRegressionModel(LightningModule):
         pred_y = self(x)
         # se = F.mse_loss(pred_y, y, reduction="sum")
         self.mse_metric.update(y, pred_y)
+        self.denorm_mse.update(y, pred_y)
 
     def test_epoch_end(self, outputs):
 
         loss = self.mse_metric.compute()
         self.log("test_mse", loss, prog_bar=True)
         self.mse_metric.reset()
+
+        denorm_mse = self.denorm_mse.compute()
+        self.denorm_mse.reset()
+        self.log("test_denorm_mse", denorm_mse, prog_bar=True)
 
         return {}
 

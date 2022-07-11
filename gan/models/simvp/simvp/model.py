@@ -23,9 +23,9 @@ class Encoder(nn.Module):
         )
 
     def forward(self, x):  # B*4, 3, 128, 128
-        for i in range(0, len(self.enc)):
-            x = self.enc[i](x)
-        return x
+        # for i in range(0, len(self.enc)):
+        #     x = self.enc[i](x)
+        return self.enc(x)
 
     def skip(self, x):
         return self.forward(x)
@@ -39,13 +39,11 @@ class Decoder(nn.Module):
         super(Decoder, self).__init__()
         strides = stride_generator(N_S, reverse=True)
         self.dec = nn.Sequential(
-            ConvSC(C_hid * 2 + hid_T, C_hid * 4, stride=strides[0], transpose=True),
-            ConvSC(C_hid * 4, C_hid * 2, stride=strides[1], transpose=True),
-            ConvSC(C_hid * 2, C_hid * 1, stride=strides[2], transpose=True),
-            *[ConvSC(C_hid, C_hid, stride=s, transpose=True) for s in strides[3:-1]],
-            ConvSC(C_hid * 2, C_hid, stride=strides[-1], transpose=True),
+            ConvSC(C_hid * 2 + hid_T, hid_T, stride=strides[0], transpose=True),
+            *[ConvSC(hid_T, hid_T, stride=s, transpose=True) for s in strides[1:-1]],
+            ConvSC(hid_T + C_hid, hid_T, stride=strides[-1], transpose=True),
         )
-        self.readout = nn.Conv2d(C_hid, C_out, 1)
+        self.readout = nn.Conv2d(hid_T, C_out, 1)
 
     def forward(self, hid, skip_before=None, skilp_all=None, skip_first=None):
         # ipdb.set_trace()
@@ -54,7 +52,7 @@ class Decoder(nn.Module):
         for i in range(0, len(self.dec) - 1):
             hid = self.dec[i](hid)
         Y = self.dec[-1](torch.cat([hid, skip_first], dim=1))
-        Y = self.readout(hid)
+        Y = self.readout(Y)
         return Y
 
 
@@ -271,46 +269,3 @@ class SimVP(nn.Module):
         return Y
 
 
-class SimVPTemporalDiscriminator(nn.Module):
-    def __init__(
-        self,
-        params,
-        shape_in=(10, 1),
-        hid_S=16,
-        hid_T=256,
-        N_S=4,
-        N_T=8,
-        incep_ker=[3, 5, 7, 11],
-        groups=8,
-    ):
-        super(SimVPTemporalDiscriminator, self).__init__()
-        self.params = params
-        shape_in = (params.in_seq_len + params.out_seq_len, params.n_channels)
-        T, C = shape_in
-        self.enc = Encoder(C, hid_S, N_S)
-        self.hid = Mid_Xnet(T * hid_S, hid_T, N_T, incep_ker, groups)
-        self.dec = Decoder(hid_S, C, N_S)
-
-        self.classifier = nn.Sequential(
-            nn.Flatten(), nn.Linear(params.imsize**2, 1), nn.Sigmoid()
-        )
-
-    def forward(self, x_raw):
-        B, T, C, H, W = x_raw.shape
-        x = x_raw.view(B * T, C, H, W)
-
-        embed, skip = self.enc(x)
-        _, C_, H_, W_ = embed.shape
-
-        z = embed.view(B, T, C_, H_, W_)
-        hid = self.hid(z)
-
-        max = torch.max(hid, dim=1)
-        return self.classifier(max[0])
-
-        hid = hid.reshape(B * T, C_, H_, W_)
-
-        Y = self.dec(hid, skip)
-        Y = Y.reshape(B, T, C, H, W)
-        Y = torch.tanh(Y)
-        return Y
