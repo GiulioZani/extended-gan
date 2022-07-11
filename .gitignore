@@ -3,7 +3,7 @@ __pycache__/
 *.py[cod]
 *$py.class
 
-.checkpoints_state_dicty
+.checkpoints_state_dict
 *.ckpt
 *.pt
 *.pth
