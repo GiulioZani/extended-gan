@@ -31,18 +31,18 @@ def _visualize_predictions(
     if not os.path.exists(path):
         os.mkdir(path)
     to_plot = [
-        denorm(x[0].squeeze(1)),
-        denorm(y[0].squeeze(1)),
-        denorm(preds[0].squeeze(1)),
-        denorm(gt_reverse[0].squeeze(1)),
-        denorm(pred_reverse[0].squeeze(1)),
+        denorm(x[0].squeeze(1).cpu().detach().numpy()),
+        denorm(y[0].squeeze(1).cpu().detach().numpy()),
+        denorm(preds[0].squeeze(1).cpu().detach().numpy()),
+        denorm(gt_reverse[0].squeeze(1).cpu().detach().numpy()),
+        denorm(pred_reverse[0].squeeze(1).cpu().detach().numpy()),
     ]
 
     _, ax = plt.subplots(nrows=len(to_plot), ncols=to_plot[0].shape[0])
     plt.suptitle(f"Epoch {epoch}")
     for i, row in enumerate(ax):
         for j, col in enumerate(row):
-            uba = to_plot[i].cpu().detach().numpy()[j]
+            uba = to_plot[i][j]
             col.imshow(uba)
 
     row_labels = ["input", "GT", "pred", "GT R", "Pred R"]

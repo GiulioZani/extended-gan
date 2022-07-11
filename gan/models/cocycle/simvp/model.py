@@ -175,7 +175,7 @@ class SimVP(nn.Module):
                 # z = self.embed(out, future)
                 # ipdb.set_trace()
                 embed = self.enc.skip(out)
-                embed = self.pos_emb(embed, T + i)
+                # embed = self.pos_emb(embed, T + i)
         else:
             for i in range(T - 1, -1, -1):
                 out = self.dec(hid[:, i, :, :, :], embed, skip_all)
@@ -184,7 +184,7 @@ class SimVP(nn.Module):
                 # z = t.cat([x[:B, :1, ...], out], 1)
                 # z = self.embed(out, future)
                 embed = self.enc.skip(out)
-                embed = self.pos_emb(embed, T - i - 1)
+                # embed = self.pos_emb(embed, T - i - 1)
 
             # reverse outs array
             # ipdb.set_trace()
