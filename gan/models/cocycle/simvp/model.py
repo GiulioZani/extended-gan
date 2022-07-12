@@ -44,7 +44,7 @@ class Decoder(nn.Module):
         self.dec = nn.Sequential(
             ConvSC(C_hid * 2 + hid_T, C_hid, stride=strides[0], transpose=True),
             *[ConvSC(C_hid, C_hid, stride=s, transpose=True) for s in strides[1:-1]],
-            ConvSC(C_hid + hid_T, C_hid, stride=strides[-1], transpose=True),
+            ConvSC(C_hid * 2, C_hid, stride=strides[-1], transpose=True),
         )
         self.readout = nn.Conv2d(C_hid, C_out, 1)
 
@@ -52,6 +52,7 @@ class Decoder(nn.Module):
         hid = t.cat([hid, ySkip, enc1], dim=1)
         for i in range(0, len(self.dec) - 1):
             hid = self.dec[i](hid)
+        # ipdb.set_trace()
         Y = self.dec[-1](t.cat([hid, last_skip], dim=1))
         Y = self.readout(Y)
         return Y
