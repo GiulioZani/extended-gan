@@ -24,6 +24,8 @@ class BaseRegressionModel(LightningModule):
         self.ssim = mate.metrics.MovingSSIM()
 
     def denorm(self, x):
+        return x
+        # should we denorm?
         return (x + 1) / 2
 
     def forward(self, z: t.Tensor) -> t.Tensor:
