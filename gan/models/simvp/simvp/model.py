@@ -70,7 +70,7 @@ class SimVP(nn.Module):
         params,
         shape_in=(10, 1),
         hid_S=64,
-        hid_D=256,
+        hid_D=128,
         hid_T=256,
         N_S=4,
         N_T=8,
