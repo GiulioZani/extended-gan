@@ -36,32 +36,64 @@ class Encoder(nn.Module):
 
 
 class Decoder(nn.Module):
-    def __init__(self, C_in, C_hid, hid_T, C_out, N_S, skip_hidden_rnn=False, dropout=False):
+    def __init__(
+        self,
+        C_in,
+        C_hid,
+        hid_T,
+        C_out,
+        N_S,
+        skip_hidden_rnn=False,
+        skip_last=False,
+        skip_time_encoded=False,
+        dropout=False,
+    ):
         super(Decoder, self).__init__()
         strides = stride_generator(N_S, reverse=True)
         self.dec = nn.Sequential(
             ConvSC(
-                ( 2 if skip_hidden_rnn else 1) * C_in + hid_T,
+                (2 if skip_hidden_rnn else 1) * C_in
+                + (1 if skip_time_encoded else 0) * hid_T,
                 C_hid,
                 stride=strides[0],
                 transpose=True,
                 dropout=dropout,
             ),
-            *[ConvSC(C_hid, C_hid, stride=s, transpose=True, dropout=dropout) for s in strides[1:-1]],
-            ConvSC(C_hid + C_in, C_hid, stride=strides[-1], transpose=True, dropout=dropout),
+            *[
+                ConvSC(C_hid, C_hid, stride=s, transpose=True, dropout=dropout)
+                for s in strides[1:-1]
+            ],
+            ConvSC(
+                C_hid + (1 if skip_last else 0) * C_in,
+                C_hid,
+                stride=strides[-1],
+                transpose=True,
+                dropout=dropout,
+            ),
         )
         self.readout = nn.Conv2d(C_hid, C_out, 1)
 
+        self.skip_hidden_rnn = skip_hidden_rnn
+        self.skip_last = skip_last
+        self.skip_time_encoded = skip_time_encoded
+
     def forward(self, hid, embedd_skip=None, skip_all=None, skip_last=None):
+
+        if not self.skip_hidden_rnn:
+            embedd_skip = None
+        if not self.skip_time_encoded:
+            skip_all = None
+
         skips = [hid, embedd_skip, skip_all]
         hid = torch.cat([skip for skip in skips if skip != None], dim=1)
         for i in range(0, len(self.dec) - 1):
             hid = self.dec[i](hid)
-        Y = self.dec[-1](torch.cat([hid, skip_last], dim=1))
+
+        if self.skip_last:
+            hid = torch.cat([hid, skip_last], dim=1)
+        Y = self.dec[-1](hid)
         Y = self.readout(Y)
         return Y
-
-
 
 
 class SimVP(nn.Module):
@@ -77,6 +109,8 @@ class SimVP(nn.Module):
         incep_ker=[3, 5, 7, 11],
         groups=4,
         skip_hidden_rnn=True,
+        skip_last=True,
+        skip_time_encoded=True,
     ):
         super(SimVP, self).__init__()
         self.params = params
@@ -85,7 +119,17 @@ class SimVP(nn.Module):
         self.enc = Encoder(C, hid_S, N_S)
         self.hid = Mid_Xnet(T * hid_S, hid_T, N_T, incep_ker, groups)
         self.embedding = nn.Embedding(T * 2 + 5, (self.params.imsize // 4) ** 2)
-        self.dec = Decoder(hid_S, hid_D, hid_T, C, N_S, skip_hidden_rnn=skip_hidden_rnn,dropout=False)
+        self.dec = Decoder(
+            hid_S,
+            hid_D,
+            hid_T,
+            C,
+            N_S,
+            skip_hidden_rnn=skip_hidden_rnn,
+            skip_last=skip_last,
+            skip_time_encoded=skip_time_encoded,
+            dropout=False,
+        )
 
         self.skip_hidden_rnn = skip_hidden_rnn
 
@@ -103,10 +147,10 @@ class SimVP(nn.Module):
         embedding = embedding.repeat(1, C, 1, 1)
         return x + embedding
 
-    def time_embed(self, x):
+    def time_embed(self, x, start=0):
         B, T, C, H, W = x.shape
 
-        label = t.tensor([i for i in range(T)], device=x.device).int()
+        label = t.tensor([i + start for i in range(T)], device=x.device).int()
         labels = label.repeat(B, 1)
 
         embedding = self.embedding(labels)
@@ -145,13 +189,31 @@ class SimVP(nn.Module):
             embed = self.pos_emb(embed, T if future else 0)
 
         skip_first = self.enc.skip_first(x_raw[:, -1 if future else 0, ...])
+
+        out_embeds = []
+
         for i in range(T):
-            out = self.dec(hid[:, i, ...], embed, skip_all, skip_first)
+
+            if i == T // 2:
+                preds = t.stack(out_embeds, dim=1)
+                # ipdb.set_trace()
+                hid[:, : T // 2, ...] = hid[:, T // 2 :, ...]
+                hid[:, T // 2 :, ...] = preds
+                hid, skip_all = self.hid(hid)
+                hid = self.time_embed(hid, start=T // 2 + T)
+
+            input = hid[:, i % (T // 2), ...]
+
+            out = self.dec(input, embed, skip_all, skip_first)
             outs.append(out)
             if self.skip_hidden_rnn:
                 embed = self.enc.skip(out)
                 embed = self.pos_emb(embed, T + i + 1)
+                out_embeds.append(embed)
+
             skip_first = self.enc.skip_first(out)
+
+            # hid = self.time_embed(hid)
 
         Y = torch.stack(outs, dim=1)
 
