@@ -31,11 +31,11 @@
 	"data_threshold": 1000,
 	"save_interval": 100,
 	"hparams": {
-			"cycle_similarity_function":"l1_smooth",
+			"cycle_similarity_function":"mse",
 			"pred_loss_function": "mse",
 			
 			"future_pred_loss_weight":1,
 			"past_pred_loss_weight":1,
-			"cycle_loss_weight":0.1
+			"cycle_loss_weight":0.5
 	}
 }
