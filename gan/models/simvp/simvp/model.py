@@ -1,8 +1,9 @@
 import imp
 import torch
-from torch import nn
-from .modules import ConvSC, Inception
+from torch import dropout, nn
+from .modules import ConvSC, Inception, Mid_Xnet
 import ipdb
+import torch as t
 
 
 def stride_generator(N, reverse=False):
@@ -35,19 +36,25 @@ class Encoder(nn.Module):
 
 
 class Decoder(nn.Module):
-    def __init__(self, C_hid, hid_T, C_out, N_S):
+    def __init__(self, C_in, C_hid, hid_T, C_out, N_S, skip_hidden_rnn=False, dropout=False):
         super(Decoder, self).__init__()
         strides = stride_generator(N_S, reverse=True)
         self.dec = nn.Sequential(
-            ConvSC(C_hid * 2 + hid_T, C_hid, stride=strides[0], transpose=True),
-            *[ConvSC(C_hid, C_hid, stride=s, transpose=True) for s in strides[1:-1]],
-            ConvSC(C_hid * 2, C_hid, stride=strides[-1], transpose=True),
+            ConvSC(
+                ( 2 if skip_hidden_rnn else 1) * C_in + hid_T,
+                C_hid,
+                stride=strides[0],
+                transpose=True,
+                dropout=dropout,
+            ),
+            *[ConvSC(C_hid, C_hid, stride=s, transpose=True, dropout=dropout) for s in strides[1:-1]],
+            ConvSC(C_hid + C_in, C_hid, stride=strides[-1], transpose=True, dropout=dropout),
         )
         self.readout = nn.Conv2d(C_hid, C_out, 1)
 
-    def forward(self, hid, embedd_skip, skilp_all=None, skip_last=None):
-
-        hid = torch.cat([hid, skilp_all, embedd_skip], dim=1)
+    def forward(self, hid, embedd_skip=None, skip_all=None, skip_last=None):
+        skips = [hid, embedd_skip, skip_all]
+        hid = torch.cat([skip for skip in skips if skip != None], dim=1)
         for i in range(0, len(self.dec) - 1):
             hid = self.dec[i](hid)
         Y = self.dec[-1](torch.cat([hid, skip_last], dim=1))
@@ -55,96 +62,6 @@ class Decoder(nn.Module):
         return Y
 
 
-class Mid_Xnet(nn.Module):
-    def __init__(self, channel_in, channel_hid, N_T, incep_ker=[3, 5, 7, 11], groups=8):
-        super(Mid_Xnet, self).__init__()
-
-        self.N_T = N_T
-        enc_layers = [
-            Inception(
-                channel_in,
-                channel_hid // 2,
-                channel_hid,
-                incep_ker=incep_ker,
-                groups=groups,
-            )
-        ]
-        for i in range(1, N_T - 1):
-            enc_layers.append(
-                Inception(
-                    channel_hid,
-                    channel_hid // 2,
-                    channel_hid,
-                    incep_ker=incep_ker,
-                    groups=groups,
-                )
-            )
-        enc_layers.append(
-            Inception(
-                channel_hid,
-                channel_hid // 2,
-                channel_hid,
-                incep_ker=incep_ker,
-                groups=groups,
-            )
-        )
-
-        dec_layers = [
-            Inception(
-                channel_hid,
-                channel_hid // 2,
-                channel_hid,
-                incep_ker=incep_ker,
-                groups=groups,
-            )
-        ]
-        for i in range(1, N_T - 1):
-            dec_layers.append(
-                Inception(
-                    2 * channel_hid,
-                    channel_hid // 2,
-                    channel_hid,
-                    incep_ker=incep_ker,
-                    groups=groups,
-                )
-            )
-        dec_layers.append(
-            Inception(
-                2 * channel_hid,
-                channel_hid // 2,
-                channel_in,
-                incep_ker=incep_ker,
-                groups=groups,
-            )
-        )
-
-        self.enc = nn.Sequential(*enc_layers)
-        self.dec = nn.Sequential(*dec_layers)
-
-    def forward(self, x):
-        B, T, C, H, W = x.shape
-        x = x.reshape(B, T * C, H, W)
-
-        # encoder
-        skips = []
-        z = x
-        for i in range(self.N_T):
-            z = self.enc[i](z)
-            if i < self.N_T - 1:
-                skips.append(z)
-        skip = z
-        # decoder
-        z = self.dec[0](z)
-        for i in range(1, self.N_T):
-            z = self.dec[i](torch.cat([z, skips[-i]], dim=1))
-
-        y = z.reshape(B, T, C, H, W)
-        return y, skip
-
-
-from ..axial.axial import AxialLayers
-from axial_attention import AxialPositionalEmbedding
-import torch as t
 
 
 class SimVP(nn.Module):
@@ -153,11 +70,13 @@ class SimVP(nn.Module):
         params,
         shape_in=(10, 1),
         hid_S=64,
+        hid_D=128,
         hid_T=256,
         N_S=4,
         N_T=8,
         incep_ker=[3, 5, 7, 11],
         groups=4,
+        skip_hidden_rnn=True,
     ):
         super(SimVP, self).__init__()
         self.params = params
@@ -165,14 +84,10 @@ class SimVP(nn.Module):
         T, C = shape_in
         self.enc = Encoder(C, hid_S, N_S)
         self.hid = Mid_Xnet(T * hid_S, hid_T, N_T, incep_ker, groups)
-        # self.hid = AxialLayers(hid_S, 3, 4, dropout=0.0, num_heads=32, residual=False)
-        # self.s_attn = AxialLayers(hid_S, 3, 8, dropout=0.3, residual=True)
-        # self.pos_emb = AxialPositionalEmbedding(
-        #     hid_S, (10, params.imsize // 4, params.imsize // 4), 2
-        # )
         self.embedding = nn.Embedding(T * 2 + 5, (self.params.imsize // 4) ** 2)
+        self.dec = Decoder(hid_S, hid_D, hid_T, C, N_S, skip_hidden_rnn=skip_hidden_rnn,dropout=0.5)
 
-        self.dec = Decoder(hid_S, hid_T, C, N_S)
+        self.skip_hidden_rnn = skip_hidden_rnn
 
     def pos_emb(self, x, T):
         # ipdb.set_trace()
@@ -224,15 +139,18 @@ class SimVP(nn.Module):
         hid = self.future_embed(hid)
 
         outs = []
-        embed = self.enc.skip(x_raw[:, -1 if future else 0, ...])
-        embed = self.pos_emb(embed, T if future else 0)
+        embed = None
+        if self.skip_hidden_rnn:
+            embed = self.enc.skip(x_raw[:, -1 if future else 0, ...])
+            embed = self.pos_emb(embed, T if future else 0)
 
         skip_first = self.enc.skip_first(x_raw[:, -1 if future else 0, ...])
         for i in range(T):
             out = self.dec(hid[:, i, ...], embed, skip_all, skip_first)
             outs.append(out)
-            embed = self.enc.skip(out)
-            embed = self.pos_emb(embed, T + i + 1)
+            if self.skip_hidden_rnn:
+                embed = self.enc.skip(out)
+                embed = self.pos_emb(embed, T + i + 1)
             skip_first = self.enc.skip_first(out)
 
         Y = torch.stack(outs, dim=1)
