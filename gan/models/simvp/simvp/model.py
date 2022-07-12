@@ -85,7 +85,7 @@ class SimVP(nn.Module):
         self.enc = Encoder(C, hid_S, N_S)
         self.hid = Mid_Xnet(T * hid_S, hid_T, N_T, incep_ker, groups)
         self.embedding = nn.Embedding(T * 2 + 5, (self.params.imsize // 4) ** 2)
-        self.dec = Decoder(hid_S, hid_D, hid_T, C, N_S, skip_hidden_rnn=skip_hidden_rnn,dropout=0.5)
+        self.dec = Decoder(hid_S, hid_D, hid_T, C, N_S, skip_hidden_rnn=skip_hidden_rnn,dropout=False)
 
         self.skip_hidden_rnn = skip_hidden_rnn
 
