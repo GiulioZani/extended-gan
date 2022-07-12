@@ -39,16 +39,15 @@ class Decoder(nn.Module):
         super(Decoder, self).__init__()
         strides = stride_generator(N_S, reverse=True)
         self.dec = nn.Sequential(
-            ConvSC(C_hid + hid_T, C_hid, stride=strides[0], transpose=True),
+            ConvSC(C_hid * 2 + hid_T, C_hid, stride=strides[0], transpose=True),
             *[ConvSC(C_hid, C_hid, stride=s, transpose=True) for s in strides[1:-1]],
             ConvSC(C_hid * 2, C_hid, stride=strides[-1], transpose=True),
         )
         self.readout = nn.Conv2d(C_hid, C_out, 1)
 
-    def forward(self, hid, skilp_all=None, skip_last=None):
-        
-        
-        hid = torch.cat([hid, skilp_all], dim=1)
+    def forward(self, hid, embedd_skip, skilp_all=None, skip_last=None):
+
+        hid = torch.cat([hid, skilp_all, embedd_skip], dim=1)
         for i in range(0, len(self.dec) - 1):
             hid = self.dec[i](hid)
         Y = self.dec[-1](torch.cat([hid, skip_last], dim=1))
@@ -216,7 +215,6 @@ class SimVP(nn.Module):
         embed = self.enc(x)
         _, C_, H_, W_ = embed.shape
 
-
         z = embed.view(B, T, C_, H_, W_)
 
         z = self.time_embed(z)
@@ -226,14 +224,17 @@ class SimVP(nn.Module):
         hid = self.future_embed(hid)
 
         outs = []
+        embed = self.enc.skip(x_raw[:, -1 if future else 0, ...])
+        embed = self.pos_emb(embed, T if future else 0)
 
         skip_first = self.enc.skip_first(x_raw[:, -1 if future else 0, ...])
         for i in range(T):
-            out = self.dec(hid[:, i, ...], skip_all, skip_first)
+            out = self.dec(hid[:, i, ...], embed, skip_all, skip_first)
             outs.append(out)
+            embed = self.enc.skip(out)
+            embed = self.pos_emb(embed, T + i + 1)
             skip_first = self.enc.skip_first(out)
 
-        
         Y = torch.stack(outs, dim=1)
 
         Y = Y.reshape(B, T, C, H, W)

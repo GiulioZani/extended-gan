@@ -48,7 +48,7 @@ class BaseRegressionModel(LightningModule):
             )
 
         sum_mse = t.mean(
-            (self.denorm(y_pred) - self.denorm(y)) ** 2, axis=(0, 1, 2)
+            (self.denorm(y_pred) - self.denorm(y)) ** 2, axis=(0, 1)
         ).sum()
         self.log("mse", sum_mse, prog_bar=True)
         return {"loss": loss, "sum_mse": sum_mse}
@@ -82,7 +82,7 @@ class BaseRegressionModel(LightningModule):
         pred_y = self(x).cpu()
         loss = F.mse_loss(pred_y, y)
         sum_mse = t.mean(
-            (self.denorm(pred_y) - self.denorm(y)) ** 2, axis=(0, 1, 2)
+            (self.denorm(pred_y) - self.denorm(y)) ** 2, axis=(0, 1)
         ).sum()
         return {"val_mse": loss, "val_loss": loss, "val_sum_mse": sum_mse}
 
@@ -105,7 +105,7 @@ class BaseRegressionModel(LightningModule):
         # se = F.mse_loss(pred_y, y, reduction="sum")
         self.mse_metric.update(y, pred_y)
         sum_mse = t.mean(
-            (self.denorm(pred_y) - self.denorm(y)) ** 2, axis=(0, 1, 2)
+            (self.denorm(pred_y) - self.denorm(y)) ** 2, axis=(0, 1)
         ).sum()
         
         return {"test_mse": self.mse_metric.compute(), "test_sum_mse": sum_mse}
