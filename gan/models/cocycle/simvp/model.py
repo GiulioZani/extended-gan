@@ -43,10 +43,8 @@ class Decoder(nn.Module):
         strides = stride_generator(N_S, reverse=True)
         self.dec = nn.Sequential(
             ConvSC(C_hid * 2 + hid_T, hid_T, stride=strides[0], transpose=True),
-            ConvSC(hid_T, hid_T, stride=strides[1], transpose=True),
-            ConvSC(hid_T, C_hid * 1, stride=strides[2], transpose=True),
-            *[ConvSC(C_hid, C_hid, stride=s, transpose=True) for s in strides[3:-1]],
-            ConvSC(C_hid * 2, C_hid, stride=strides[-1], transpose=True),
+            *[ConvSC(hid_T, hid_T, stride=s, transpose=True) for s in strides[1:-1]],
+            ConvSC(C_hid + hid_T, C_hid, stride=strides[-1], transpose=True),
         )
         self.readout = nn.Conv2d(C_hid, C_out, 1)
 
@@ -55,7 +53,7 @@ class Decoder(nn.Module):
         for i in range(0, len(self.dec) - 1):
             hid = self.dec[i](hid)
         Y = self.dec[-1](t.cat([hid, last_skip], dim=1))
-        Y = self.readout(hid)
+        Y = self.readout(Y)
         return Y
 
 

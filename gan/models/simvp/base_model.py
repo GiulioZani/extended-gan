@@ -22,9 +22,7 @@ class BaseRegressionModel(LightningModule):
         self.loss = lambda x, y: loss(x.flatten(), y.flatten())  # t.nn.MSELoss()
         self.mse_metric = torchmetrics.MeanSquaredError()
         self.ssim = mate.metrics.MovingSSIM()
-        self.sum_mse = t.nn.MSELoss(reduction="sum")
 
-        # self.denorm_mse = mate.DenormMSE()
 
     def forward(self, z: t.Tensor) -> t.Tensor:
         out = self.generator(z)
@@ -45,8 +43,8 @@ class BaseRegressionModel(LightningModule):
                 label="train",
             )
 
-        sum_mse = F.mse_loss(y_pred, y, reduction="sum")
-        self.log("sum_mse", sum_mse, prog_bar=True)
+        sum_mse = t.mean((y_pred - y) ** 2, axis=(0, 1, 2)).sum()
+        self.log("mse", sum_mse, prog_bar=True)
         return {"loss": loss, "sum_mse": sum_mse}
 
         return {"loss": loss}
@@ -78,7 +76,7 @@ class BaseRegressionModel(LightningModule):
         y = y.cpu()
         pred_y = self(x).cpu()
         loss = F.mse_loss(pred_y, y)
-        sum_mse = F.mse_loss(pred_y, y, reduction="sum")
+        sum_mse = t.mean((pred_y - y) ** 2, axis=(0, 1, 2)).sum()
         return {"val_mse": loss, "val_loss": loss, "val_sum_mse": sum_mse}
 
     def test_step(self, batch: tuple[t.Tensor, t.Tensor], batch_idx: int):
@@ -99,7 +97,7 @@ class BaseRegressionModel(LightningModule):
 
         # se = F.mse_loss(pred_y, y, reduction="sum")
         self.mse_metric.update(y, pred_y)
-        sum_mse = F.mse_loss(pred_y, y, reduction="sum")
+        sum_mse = t.mean((pred_y - y) ** 2, axis=(0, 1, 2)).sum()
         return {"test_mse": self.mse_metric.compute(), "test_sum_mse": sum_mse}
 
     def test_epoch_end(self, outputs):

@@ -4,7 +4,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 from pytorch_lightning import LightningModule
 
-# from .base_model import BaseModel
 import os
 import ipdb
 from argparse import Namespace
@@ -12,8 +11,7 @@ import matplotlib.pyplot as plt
 import torchmetrics
 
 from .visualize import _visualize_predictions
-
-# from ..utils.visualize_predictions import visualize_predictions
+import mate
 
 
 class CoCycleGAN(LightningModule):
@@ -23,7 +21,6 @@ class CoCycleGAN(LightningModule):
 
         self.generator = nn.Sequential()
         self.discriminator = nn.Sequential()
-        self.best_val_loss = float("inf")
         self.val_mse = torchmetrics.MeanSquaredError()
 
         self.x_future = False
@@ -33,11 +30,19 @@ class CoCycleGAN(LightningModule):
             (t.tensor(0), t.tensor(0), t.tensor(0)),
         ]
 
+        self.__losses = {
+            "l1": F.l1_loss,
+            "mse": F.mse_loss,
+            "l1_smooth": F.smooth_l1_loss,
+        }
+
+        # self.denorm_mse = mate.metrics.DenormMSE(lambda x: (x + 1) / 2)
+
+        self.__cycle_loss = self.__losses[self.params.hparams.cycle_similarity_function]
+        self.__loss_function = self.__losses[self.params.hparams.pred_loss_function]
+
     def forward(self, x: t.Tensor, future: bool = False) -> t.Tensor:
         return self.generator(x, future=future)
-
-    def __unembed(self, x: t.Tensor) -> t.Tensor:
-        return x[:, 1:]
 
     def __visualize_predictions(self, x, y, flag):
         future = self.y_future
@@ -55,18 +60,6 @@ class CoCycleGAN(LightningModule):
             flag,
         )
 
-    def __save_model(self):
-        # run on thread
-        return
-        thread = threading.Thread(
-            target=lambda: t.save(
-                self.state_dict(),
-                os.path.join(self.params.save_path, "model.pt"),
-            ),
-            args=(),
-        )
-        thread.start()
-
     def validation_step(self, batch: tuple[t.Tensor, t.Tensor], batch_idx: int):
         x, y = batch
         # generator_loss = self.__generator_loss(x, y, batch_idx, flag="val")
@@ -74,31 +67,26 @@ class CoCycleGAN(LightningModule):
         mse_loss = F.mse_loss(pred, y)
         self.val_mse.update(pred.detach(), y.detach())
 
+        mse_sum = t.mean((pred - y) ** 2, axis=(0, 1, 2)).sum()
+
         if batch_idx == 0:
             self.__visualize_predictions(x, y, "val")
 
         return {
             "val_loss": mse_loss,
+            "mse_sum": mse_sum,
             # "val_mse_loss": mse_loss,
         }
 
     def validation_epoch_end(self, outputs):
-        # avg_loss = t.stack([x["val_loss"] for x in outputs]).mean()
 
         avg_mse_loss = self.val_mse.compute()
-        # sum_mse_loss = t.stack([x["val_mse_loss"] for x in outputs]).sum()
+        sum_mse_loss = t.stack([x["mse_sum"] for x in outputs]).sum()
+
         self.val_mse.reset()
 
-        # self.log("val_sum_mse_loss", sum_mse_loss)
         self.log("val_loss", avg_mse_loss, prog_bar=True)
-
-        # if avg_loss < self.best_val_loss:
-        #     self.best_val_loss = avg_loss
-        #     t.save(
-        #         self.state_dict(),
-        #         os.path.join(self.params.save_path, "best_model.pt"),
-        #     )
-        #     print("Saved model")
+        self.log("val_mse_sum", sum_mse_loss, prog_bar=True)
 
         return {"val_loss": avg_mse_loss}
 
@@ -106,62 +94,22 @@ class CoCycleGAN(LightningModule):
         x, y = batch
         # generator_loss = self.__generator_loss(x, y, batch_idx, flag="test")
         pred = self.generator(x, future=self.y_future)
-        mse_loss = F.mse_loss(pred, y)
+        mse_sum = t.mean((pred - y) ** 2, axis=(0, 1, 2)).sum()
 
         self.val_mse.update(pred.detach(), y.detach())
 
         if batch_idx == 0:
             self.__visualize_predictions(x, y, "test")
-        return {
-            "val_loss": mse_loss,
-            "val_mse_loss": mse_loss,
-        }
+        return {"mse_loss": mse_sum}
 
     def test_epoch_end(self, outputs):
-        # avg_loss = t.stack([x["val_loss"] for x in outputs]).mean()
-        # self.log("val_mse_loss", t.stack([x["val_mse_loss"] for x in outputs]).mean())
-        # self.log("val_loss", avg_loss, prog_bar=True)
-        # self.log("val_gen_loss", avg_loss, prog_bar=True)
-        # self.log("val_disc_loss", avg_disc_loss, prog_bar=True)
-        # sum_mse_loss = t.stack([x["val_mse_loss"] for x in outputs]).sum()
+
         test_loss = self.val_mse.compute()
-        # self.log("r_val_mse_loss", test_loss)
-        # self.log("test_mse", sum_mse_loss)
+        mse_avg_loss = t.stack([x["mse_loss"] for x in outputs]).mean()
+        self.log("test_loss", test_loss, prog_bar=True)
+
         self.val_mse.reset()
-        return {"val_loss": test_loss}
-
-    def __generator_loss(self, x: t.Tensor, y: t.Tensor, batch_idx: int, flag: str):
-        visualize = (batch_idx % 10 == 0) if flag == "train" else (batch_idx == 0)
-
-        if visualize:
-            self.__visualize_predictions(x, y, flag)
-
-        pred_y = self.generator(x, future=self.y_future)
-        pred_x = self.generator(y, future=self.x_future)
-        # cycle_x = self.generator(pred_y, future=self.x_future)
-        # cycle_y = self.generator(pred_x, future=self.y_future)
-
-        pred_y_l1 = F.mse_loss(pred_y, y)
-        pred_x_l1 = F.mse_loss(pred_x, x)
-        # pred_cycle_l1 = F.l1_loss(cycle_x, x)
-        # pred_y_cycle_l1 = F.l1_loss(cycle_y, y)
-
-        # mse_sum_pred_y_loss = F.mse_loss(pred_y, y, reduction="sum")
-
-        # self.log("CoCycleLoss/pred_y_l1", pred_y_l1)
-
-        # self.log("CoCycleLoss/pred_y", pred_y_l1)
-        # self.log("CoCycleLoss/pred_x", pred_x_l1)
-        # self.log("CoCycleLoss/pred_cycle", pred_cycle_l1)
-        # self.log("CoCycleLoss/pred_y_cycle", pred_y_cycle_l1)
-        # self.log("CoCycleLoss/mse_sum_pred_y", mse_sum_pred_y_loss / 10)
-
-        # return (
-        #     +self.params.hparams["l1_cyclic_loss_weight"]
-        #     * (pred_cycle_l1 + pred_y_cycle_l1)
-        #     + self.params.hparams["l1_pred_loss_weight"] * pred_y_l1
-        #     + self.params.hparams["l1_past_pred_loss_weight"] * pred_x_l1
-        # )
+        return {"test_loss": test_loss, "test_mse_loss": mse_avg_loss}
 
     def training_step(
         self,
@@ -171,46 +119,46 @@ class CoCycleGAN(LightningModule):
         x, y = batch
 
         if batch_idx % self.params.save_interval == 0:
-            # save the model on a thread
-            # self.__save_model()
-            # visualize = True
-            # if visualize:
             self.__visualize_predictions(x, y, "train")
 
         pred_y = self.generator(x, future=self.y_future)
         pred_x = self.generator(y, future=self.x_future)
-        # cycle_x = self.generator(pred_y, future=self.x_future)
-        # cycle_y = self.generator(pred_x, future=self.y_future)
 
-        pred_y_loss = F.mse_loss(pred_y, y)
-        pred_x_loss = F.mse_loss(pred_x, x)
-        # pred_cycle_loss = F.mse_loss(cycle_x, x)
-        # pred_y_cycle_loss = F.mse_loss(cycle_y, y)
+        pred_y_loss = self.__loss_function(pred_y, y)
+        pred_x_loss = self.__loss_function(pred_x, x)
 
-        loss = (
-            # self.params.hparams.l1_cyclic_loss_weight
-            # * (pred_cycle_loss + pred_y_cycle_loss)
-            + self.params.hparams.l1_pred_loss_weight * pred_y_loss
-            + self.params.hparams.l1_past_pred_loss_weight * pred_x_loss
-        )
-        # self.log("CoCycleLoss/pred_y_loss", pred_y_loss)
-        # self.log("CoCycleLoss/pred_x_loss", pred_x_loss)
-        # self.log("CoCycleLoss/pred_cycle_loss", pred_cycle_loss)
-        # self.log("CoCycleLoss/pred_y_cycle_loss", pred_y_cycle_loss)
-        # self.log("CoCycleLoss/loss", loss)
-        self.log("mse_loss", pred_y_loss)
+        loss = self.params.hparams.future_pred_loss_weight * pred_y_loss
 
-        return {"loss": loss}
+        # self.denorm_mse.update(pred_y, y)
+        # self.log("denorm_mse", self.denorm_mse.compute(), prog_bar=True)
 
-        self.log("mse_loss", pred_y, prog_bar=True)
-        # loss = self.__generator_loss(x, y, batch_idx, flag="train")
-        self.log("g_loss", loss, prog_bar=True)
-        return {"loss": loss}
+        if self.params.hparams.past_pred_loss_weight > 0:
+            loss += self.params.hparams.past_pred_loss_weight * pred_x_loss
+
+        if self.params.hparams.cycle_loss_weight > 0:
+            cycle_x = self.generator(pred_y, future=self.x_future)
+            cycle_y = self.generator(pred_x, future=self.y_future)
+
+            cycle_x_loss = self.__cycle_loss(cycle_x, x)
+            cycle_y_loss = self.__cycle_loss(cycle_y, y)
+
+            loss += self.params.hparams.cycle_loss_weight * (
+                cycle_x_loss + cycle_y_loss
+            )
+
+        # mse_sum = F.mse_loss(pred_y, y, reduction="sum")
+        # self.log("t_mse_sum", mse_sum, prog_bar=True)
+        mse_batch = t.mean((pred_y - y) ** 2, axis=(0, 1, 2)).sum()
+        # ipdb.set_trace()
+        self.log("pred_loss", pred_y_loss, prog_bar=True)
+        self.log("mse_loss", mse_batch, prog_bar=True)
+
+        return {"loss": loss, "mse_batch": mse_batch}
 
     def training_epoch_end(self, outputs):
 
-        # avg_loss = t.stack([x["loss"] for x in outputs]).mean()
-        # self.log("g_loss", avg_loss, prog_bar=True)
+        avg_loss = t.stack([x["mse_batch"] for x in outputs]).mean()
+        # self.log("avg_l", avg_loss, prog_bar=True)
         # return {"g_loss": avg_loss}
         return None
 
