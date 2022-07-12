@@ -39,16 +39,16 @@ class Decoder(nn.Module):
         super(Decoder, self).__init__()
         strides = stride_generator(N_S, reverse=True)
         self.dec = nn.Sequential(
-            ConvSC(C_hid * 2 + hid_T, C_hid, stride=strides[0], transpose=True),
+            ConvSC(C_hid + hid_T, C_hid, stride=strides[0], transpose=True),
             *[ConvSC(C_hid, C_hid, stride=s, transpose=True) for s in strides[1:-1]],
             ConvSC(C_hid * 2, C_hid, stride=strides[-1], transpose=True),
         )
         self.readout = nn.Conv2d(C_hid, C_out, 1)
 
-    def forward(self, hid, skip_before=None, skilp_all=None, skip_last=None):
-        # ipdb.set_trace()
-        # noise = torch.randn_like(hid)
-        hid = torch.cat([hid, skilp_all, skip_before], dim=1)
+    def forward(self, hid, skilp_all=None, skip_last=None):
+        
+        
+        hid = torch.cat([hid, skilp_all], dim=1)
         for i in range(0, len(self.dec) - 1):
             hid = self.dec[i](hid)
         Y = self.dec[-1](torch.cat([hid, skip_last], dim=1))
@@ -216,51 +216,24 @@ class SimVP(nn.Module):
         embed = self.enc(x)
         _, C_, H_, W_ = embed.shape
 
-        # embed = self.time_embed(embed)
+
         z = embed.view(B, T, C_, H_, W_)
+
         z = self.time_embed(z)
-        # positionally embed z
 
         hid, skip_all = self.hid(z)
 
-        # for i in range(T):
-        #     hid[:, i, :, :, :] = self.pos_emb(
-        #         hid[:, i, :, :, :], i if future else T - i - 1
-        #     )
         hid = self.future_embed(hid)
 
         outs = []
-        embed = self.enc.skip(x_raw[:, -1 if future else 0, ...])
-        embed = self.pos_emb(embed, T if future else 0)
+
         skip_first = self.enc.skip_first(x_raw[:, -1 if future else 0, ...])
-        # skip_first = self.pos_emb(skip_first, T if future else 0)
+        for i in range(T):
+            out = self.dec(hid[:, i, ...], skip_all, skip_first)
+            outs.append(out)
+            skip_first = self.enc.skip_first(out)
 
-        if future:
-            for i in range(T):
-                # input = self.pos_emb(hid[:, i, ...], i)
-                out = self.dec(hid[:, i, ...], embed, skip_all, skip_first)
-                outs.append(out)
-                # ipdb.set_trace()
-                # z = torch.cat([x[:B, :1, ...], out], 1)
-                # z = self.embed(out, future)
-                # ipdb.set_trace()
-                embed = self.enc.skip(out)
-                embed = self.pos_emb(embed, T + i + 1)
-                skip_first = self.enc.skip_first(out)
-        else:
-            for i in range(T - 1, -1, -1):
-                input = self.pos_emb(hid[:, i, ...], i)
-                out = self.dec(input, embed, skip_all, skip_first)
-                # outs.insert(0, out)
-                outs.append(out)
-                z = torch.cat([x[:B, :1, ...], out], 1)
-                # z = self.embed(out, future)
-                embed = self.enc.skip(z)
-
-            # reverse outs array
-            # ipdb.set_trace()
-            outs = outs[::-1]
-
+        
         Y = torch.stack(outs, dim=1)
 
         Y = Y.reshape(B, T, C, H, W)
