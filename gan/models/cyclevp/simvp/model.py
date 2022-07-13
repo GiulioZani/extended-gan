@@ -167,6 +167,16 @@ class SimVP(nn.Module):
         embedding = embedding.reshape(B, T, 1, H, W)
         return x + embedding
 
+    def range_embed(self, x, start=0, end=10):
+        B, T, C, H, W = x.shape
+
+        label = t.tensor([i for i in range(start, end)], device=x.device).int()
+        labels = label.repeat(B, 1)
+
+        embedding = self.embedding(labels)
+        embedding = embedding.reshape(B, T, 1, H, W)
+        return x + embedding
+
     def forward(self, x_raw, future=True):
         B, T, C, H, W = x_raw.shape
         x = x_raw.view(B * T, C, H, W)
@@ -176,11 +186,13 @@ class SimVP(nn.Module):
 
         z = embed.view(B, T, C_, H_, W_)
 
+        hid_emb = embed.view(B, T, C_, H_, W_)
+
         z = self.time_embed(z)
 
         hid, skip_all = self.hid(z)
 
-        hid = self.future_embed(hid)
+        hid = self.range_embed(hid, start=T, end=T + T // 2)
 
         outs = []
         embed = None
@@ -192,16 +204,8 @@ class SimVP(nn.Module):
 
         out_embeds = []
 
-        for i in range(T):
-
-            if i == T // 2:
-                preds = t.stack(out_embeds, dim=1)
-                # ipdb.set_trace()
-                hid[:, : T // 2, ...] = hid[:, T // 2 :, ...]
-                hid[:, T // 2 :, ...] = preds
-                hid, skip_all = self.hid(hid)
-                hid = self.time_embed(hid, start=T)
-
+        # first predict half of the future
+        for i in range(T // 2):
             out = self.dec(hid[:, i, ...], embed, skip_all, skip_first)
             outs.append(out)
             if self.skip_hidden_rnn:
@@ -211,12 +215,29 @@ class SimVP(nn.Module):
 
             skip_first = self.enc.skip_first(out)
 
+        preds = t.stack(out_embeds[: T // 2], dim=1)
+        z = self.time_embed(hid_emb)
+        z[:, : T // 2, ...] = z[:, T // 2 :, ...]
+        z[:, T // 2 :, ...] = preds
 
-                # hid = self.time_embed(hid)
+        hid, skip_all = self.hid(z)
+        hid = self.range_embed(hid, start=T + T // 2, end=T + T)
+
+        # predict the rest of the future
+        for i in range(T // 2):
+            out = self.dec(hid[:, i, ...], embed, skip_all, skip_first)
+            outs.append(out)
+            if self.skip_hidden_rnn:
+                embed = self.enc.skip(out)
+                embed = self.pos_emb(embed, T + i + 1)
+                # out_embeds.append(embed)
+            skip_first = self.enc.skip_first(out)
 
         Y = torch.stack(outs, dim=1)
 
         Y = Y.reshape(B, T, C, H, W)
+
+        # ipdb.set_trace()
 
         Y = torch.tanh(Y)
         return Y
