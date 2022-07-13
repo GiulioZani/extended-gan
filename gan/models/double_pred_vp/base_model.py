@@ -47,11 +47,11 @@ class BaseRegressionModel(LightningModule):
                 label="train",
             )
 
-        # sum_mse = t.mean(
-        #     (self.denorm(y_pred) - self.denorm(y)) ** 2, axis=(0, 1)
-        # ).sum()
-        # self.log("mse", sum_mse, prog_bar=True)
-        return {"loss": loss}
+        sum_mse = t.mean(
+            (self.denorm(y_pred) - self.denorm(y)) ** 2, axis=(0, 1)
+        ).sum()
+        self.log("mse", sum_mse, prog_bar=True)
+        return {"loss": loss, "sum_mse": sum_mse}
 
         return {"loss": loss}
 

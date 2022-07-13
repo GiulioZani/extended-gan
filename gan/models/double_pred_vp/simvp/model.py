@@ -76,11 +76,11 @@ class Decoder(nn.Module):
         )
         self.readout = nn.Conv2d(C_hid, C_out, 1)
 
-        if skip_last:
-            self.last_convs = nn.Sequential(
-                ConvSC(C_hid * 2, C_hid, stride=1, transpose=False),
-                ConvSC(C_hid, C_hid, stride=1, transpose=False),
-            )
+        # if skip_last:
+        #     self.last_convs = nn.Sequential(
+        #         ConvSC(C_hid * 2, C_hid, stride=1, transpose=False),
+        #         ConvSC(C_hid, C_hid, stride=1, transpose=False),
+        #     )
 
         self.skip_first = skip_first
         self.skip_last = skip_last
@@ -168,21 +168,23 @@ class SimVP(nn.Module):
         self.skip_first_all = skip_first_all
 
     def pos_emb(self, x, T):
-
+        # ipdb.set_trace()
         B, C, H, W = x.shape
+        # B of T tensor
 
         label = t.tensor(T, device=x.device).int()
         labels = label.repeat(B, 1)
+        # ipdb.set_trace()
 
         embedding = self.embedding(labels)
         embedding = embedding.reshape(B, 1, H, W)
         embedding = embedding.repeat(1, C, 1, 1)
         return x + embedding
 
-    def time_embed(self, x, start_idx=0):
+    def time_embed(self, x, start=0):
         B, T, C, H, W = x.shape
 
-        label = t.tensor([i + start_idx for i in range(T)], device=x.device).int()
+        label = t.tensor([i + start for i in range(T)], device=x.device).int()
         labels = label.repeat(B, 1)
 
         embedding = self.embedding(labels)
@@ -193,6 +195,16 @@ class SimVP(nn.Module):
         B, T, C, H, W = x.shape
 
         label = t.tensor([i + 10 for i in range(T)], device=x.device).int()
+        labels = label.repeat(B, 1)
+
+        embedding = self.embedding(labels)
+        embedding = embedding.reshape(B, T, 1, H, W)
+        return x + embedding
+
+    def range_embed(self, x, start=0, end=10):
+        B, T, C, H, W = x.shape
+
+        label = t.tensor([i for i in range(start, end)], device=x.device).int()
         labels = label.repeat(B, 1)
 
         embedding = self.embedding(labels)
@@ -212,20 +224,24 @@ class SimVP(nn.Module):
         skips = skips + embeddings
 
         # reverse order of T in skips
-        return skips.flip(1)
+        return skips  # .flip(1)
 
-    def forward(self, x_raw):
+    def forward(self, x_raw, future=True):
         B, T, C, H, W = x_raw.shape
         x = x_raw.view(B * T, C, H, W)
 
         embed = self.enc(x)
         _, C_, H_, W_ = embed.shape
 
+        z = embed.view(B, T, C_, H_, W_)
+
         embed = embed.view(B, T, C_, H_, W_)
 
-        z = self.time_embed(embed)
+        hid_emb = embed
 
-        hid, skip_time_encoded = self.hid(z)
+        z = self.time_embed(z)
+
+        hid, skip_all = self.hid(z)
 
         hid = self.future_embed(hid)
 
@@ -238,10 +254,13 @@ class SimVP(nn.Module):
         skips = skips.view(B, T, C_, H, W)
         skips_emb = self.skip_embed(skips, 0)
 
+        out_embeds = []
+
         if self.skip_first and not self.skip_first_all:
             embed = embed[:, -1, ...]
 
-        for i in range(T):
+        # first predict half of the future
+        for i in range(T // 2):
 
             if self.skip_first:
                 if self.skip_first_all:
@@ -249,7 +268,36 @@ class SimVP(nn.Module):
                 else:
                     skip_first = self.pos_emb(embed, T + i - 1)
 
-            out = self.dec(hid[:, i, ...], skip_first, skip_time_encoded, skips_emb)
+            out = self.dec(hid[:, i, ...], skip_first, skip_all, skips_emb)
+            outs.append(out)
+            if self.skip_first:
+                n_embed = self.enc.skip(out)
+                if self.skip_first_all:
+                    n_embed = n_embed.unsqueeze(1)
+                    embed = t.cat([embed, n_embed], dim=1)
+                    embed = embed[:, 1:, ...]
+                else:
+                    embed = n_embed
+                out_embeds.append(self.pos_emb(n_embed, T + i))
+
+        preds = t.stack(out_embeds, dim=1)
+        z = self.time_embed(hid_emb)
+        z = z[:, T // 2 :, ...]
+        # ipdb.set_trace()
+        z = t.cat([z, preds], 1)
+
+        hid, skip_all = self.hid(z)
+        hid = self.time_embed(hid, T + T // 2)
+
+        # predict the rest of the future
+        for i in range(T // 2):
+            if self.skip_first:
+                if self.skip_first_all:
+                    skip_first = self.time_embed(embed, i)
+                else:
+                    skip_first = self.pos_emb(embed, T + i - 1)
+
+            out = self.dec(hid[:, i, ...], embed, skip_all, skips_emb)
             outs.append(out)
             if self.skip_first:
                 n_embed = self.enc.skip(out)
@@ -263,6 +311,8 @@ class SimVP(nn.Module):
         Y = torch.stack(outs, dim=1)
 
         Y = Y.reshape(B, T, C, H, W)
+
+        # ipdb.set_trace()
 
         Y = torch.tanh(Y)
         return Y
