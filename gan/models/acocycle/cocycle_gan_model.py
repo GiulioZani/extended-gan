@@ -84,7 +84,9 @@ class CoCycleGAN(LightningModule):
             embedding = embedding.repeat((x.shape[0], x.shape[1], 1, 1, 1)).to(
                 self.device
             )
-        return t.cat((embedding, x), dim=self.params.channel_dim if len(x.shape) == 5 else 1)
+        return t.cat(
+            (embedding, x), dim=self.params.channel_dim if len(x.shape) == 5 else 1
+        )
 
     def __unembed(self, x: t.Tensor) -> t.Tensor:
         return x[:, 1:]
@@ -92,7 +94,9 @@ class CoCycleGAN(LightningModule):
     def __visualize_predictions(self, x, y, flag):
         future = self.y_future
         fake_y = self.generator(self.__embed(x, future=future))
-        fake_x = self.generator(self.__embed(fake_y, future=not future), future=not future)
+        fake_x = self.generator(
+            self.__embed(fake_y, future=not future), future=not future
+        )
 
         _visualize_predictions(
             x,
@@ -195,8 +199,12 @@ class CoCycleGAN(LightningModule):
             self.__visualize_predictions(x, y, flag)
 
         pred_y = self.generator(self.__embed(x, future=self.y_future))
-        fake_x = self.generator(self.__embed(pred_y, future=self.x_future), future=self.x_future)
-        pred_x = self.generator(self.__embed(y, future=self.x_future), future=self.x_future)
+        fake_x = self.generator(
+            self.__embed(pred_y, future=self.x_future), future=self.x_future
+        )
+        pred_x = self.generator(
+            self.__embed(y, future=self.x_future), future=self.x_future
+        )
         cycle_y = self.generator(self.__embed(pred_x, future=self.y_future))
 
         pred_y_l1 = F.mse_loss(pred_y, y)
@@ -261,6 +269,8 @@ class CoCycleGAN(LightningModule):
             patience=self.params.reduce_lr_on_plateau_patience,
             verbose=True,
             factor=self.params.reduce_lr_on_plateau_factor,
+            mode="min",
+            threshold_mode="rel"
         )
         """
         (

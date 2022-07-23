@@ -183,7 +183,7 @@ class Mid_Xnet(nn.Module):
             Inception(
                 2 * channel_hid,
                 channel_hid // 2,
-                channel_in // 2,
+                channel_in ,
                 incep_ker=incep_ker,
                 groups=groups,
             )

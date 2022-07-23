@@ -66,7 +66,7 @@ class Decoder(nn.Module):
             ],
             ConvSC(
                 C_hid + (10 if skip_last else 0) * C_in,
-                C_hid,
+                C_hid * (1 if skip_last else 1),
                 stride=strides[-1],
                 transpose=True,
                 dropout=dropout,
@@ -76,8 +76,8 @@ class Decoder(nn.Module):
 
         # if skip_last:
         #     self.last_convs = nn.Sequential(
-        #         ConvSC(C_hid * 2, C_hid, stride=1, transpose=False),
-        #         ConvSC(C_hid, C_hid, stride=1, transpose=False),
+        #         ConvSC(C_hid * 4, C_hid * 1, stride=1, transpose=False),
+        #         # ConvSC(C_hid * 2, C_hid, stride=1, transpose=False),
         #     )
 
         self.skip_hidden_rnn = skip_hidden_rnn
@@ -101,6 +101,9 @@ class Decoder(nn.Module):
             hid = torch.cat([hid, skip_last], dim=1)
 
         Y = self.dec[-1](hid)
+
+        # if self.skip_last:
+        #     Y = self.last_convs(Y)
 
         Y = self.readout(Y)
         return Y

@@ -24,7 +24,6 @@
 	"early_stopping_patience": 5,
 	"reduce_lr_on_plateau_patience": 0,
 	"reduce_lr_on_plateau_factor": 0.5,
-	"reduce_lr_on_plateau_threshold": 1e-1,
 	"data_location": "./datasets/ponte-nova.pt",
 	"crop": 64,
 	"data_loader": "ponte-nova",
@@ -32,9 +31,9 @@
 	"save_interval": 100,
 	"sliding_window_size": 1,
 	"hparams": {
-		"l1_pred_loss_weight": 10,
+		"l1_pred_loss_weight": 1,
 		"l1_past_pred_loss_weight": 1,
-		"l1_cyclic_loss_weight": 0.1,
+		"l1_cyclic_loss_weight": 0,
 		"adversarial_loss_weight": 0.01
 	}
 }

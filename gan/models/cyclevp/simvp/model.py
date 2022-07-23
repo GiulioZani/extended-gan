@@ -232,7 +232,7 @@ class SimVP(nn.Module):
 
         hid, skip_all = self.hid(z)
 
-        hid = self.range_embed(hid, start=T, end=T + T // 2)
+        hid = self.future_embed(hid)
 
         outs = []
 
@@ -260,10 +260,11 @@ class SimVP(nn.Module):
                 embed = t.cat([embed, n_embed], dim=1)
                 embed = embed[:, 1:, ...]
 
-        preds = t.stack(out_embeds[: T // 2], dim=1)
+        preds = t.stack(out_embeds, dim=1)
         z = self.time_embed(embed)
-        z[:, : T // 2, ...] = z[:, T // 2 :, ...]
-        z[:, T // 2 :, ...] = preds
+        z = z[:, T // 2 :, ...]
+        # ipdb.set_trace()
+        z = t.cat([z, preds], 1)
 
         hid, skip_all = self.hid(z)
         hid = self.future_embed(hid)

@@ -216,4 +216,4 @@ class MovingMNIST(data.Dataset):
         return input, output
 
     def __len__(self):
-        return self.length # if self.is_train else self.length
+        return self.length #self.length # if self.is_train else self.length

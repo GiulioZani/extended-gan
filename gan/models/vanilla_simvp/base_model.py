@@ -19,6 +19,11 @@ class BaseRegressionModel(LightningModule):
         loss = t.nn.MSELoss()
         self.loss = lambda x, y: loss(x.flatten(), y.flatten())  # t.nn.MSELoss()
 
+    def denorm(self, x):
+        return x
+        # should we denorm?
+        return (x + 1) / 2
+
     def forward(self, z: t.Tensor) -> t.Tensor:
         out = self.generator(z)
         return out
@@ -31,16 +36,16 @@ class BaseRegressionModel(LightningModule):
         if batch_idx % 100 == 0:
             visualize_predictions(x, y, y_pred, path=self.params.save_path)
 
-        return {"loss": loss}
+        sum_mse = t.mean((self.denorm(y_pred) - self.denorm(y)) ** 2, axis=(0, 1)).sum()
+        self.log("mse", sum_mse, prog_bar=True)
+
+        return {"loss": loss, "mse": sum_mse}
 
     def validation_epoch_end(self, outputs):
         avg_loss = t.stack([x["val_loss"] for x in outputs]).mean()
         self.log("val_loss", avg_loss, prog_bar=True)
-        t.save(
-            self.state_dict(),
-            os.path.join(self.params.save_path, "model.pt"),
-        )
-
+        avg_mse = t.stack([x["val_sum_mse"] for x in outputs]).mean()
+        self.log("val_mse", avg_mse, prog_bar=True)
 
         return {"val_mse": avg_loss}
 
@@ -61,8 +66,10 @@ class BaseRegressionModel(LightningModule):
         y = y.cpu()
         pred_y = self(x).cpu()
         loss = F.mse_loss(pred_y, y)
+
+        sum_mse = t.mean((self.denorm(pred_y) - self.denorm(y)) ** 2, axis=(0, 1)).sum()
         # self.log("val_mse", loss, prog_bar=True)
-        return {"val_mse": loss, "val_loss": loss}
+        return {"val_mse": loss, "val_loss": loss, "val_sum_mse": sum_mse}
 
     def test_step(self, batch: tuple[t.Tensor, t.Tensor], batch_idx: int):
         x, y = batch

@@ -36,15 +36,16 @@ class Decoder(nn.Module):
         strides = stride_generator(N_S, reverse=True)
         self.dec = nn.Sequential(
             *[ConvSC(C_hid, C_hid, stride=s, transpose=True) for s in strides[:-1]],
-            ConvSC(2 * C_hid, C_hid, stride=strides[-1], transpose=True)
+            ConvSC( C_hid, C_hid, stride=strides[-1], transpose=True)
         )
         self.readout = nn.Conv2d(C_hid, C_out, 1)
 
     def forward(self, hid, enc1=None):
-        for i in range(0, len(self.dec) - 1):
+        for i in range(0, len(self.dec)):
             hid = self.dec[i](hid)
-        Y = self.dec[-1](torch.cat([hid, enc1], dim=1))
-        Y = self.readout(Y)
+        # enc1 = torch.rand_like(enc1)
+        # Y = self.dec[-1](torch.cat([hid, enc1], dim=1))
+        Y = self.readout(hid)
         return Y
 
 
@@ -145,7 +146,7 @@ class SimVP(nn.Module):
         params,
         shape_in=(10, 1),
         hid_S=64,
-        hid_T=512,
+        hid_T=256,
         N_S=4,
         N_T=8,
         incep_ker=[3, 5, 7, 11],
@@ -165,8 +166,8 @@ class SimVP(nn.Module):
 
         self.dec = Decoder(hid_S, C, N_S)
         self.act_out = {
-            "tanh":nn.Tanh,
-            "sigmoid":nn.Sigmoid
+            "tanh":nn.Tanh(),
+            "sigmoid":nn.Sigmoid()
         }[params.output_activation]
 
     def forward(self, x_raw):

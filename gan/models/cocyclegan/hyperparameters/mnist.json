@@ -29,6 +29,7 @@
 	"data_loader": "moving_mnist",
 	"data_threshold": 1000,
 	"save_interval": 100,
+	"output_activation":"tanh",
 	"hparams": {
 		"l1_pred_loss_weight": 50,
 		"l1_past_pred_loss_weight": 50,
